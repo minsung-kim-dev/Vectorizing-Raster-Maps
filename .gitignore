@@ -1,0 +1,5 @@
+data/
+!data/osm_carto_compare/render_carto.py
+osm_data/
+*.zip
+crops/
