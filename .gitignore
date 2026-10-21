@@ -5,6 +5,7 @@ data/geojson/sources
 data/tmp
 data/train10000
 data/train10000_png
+data/README.md
 *.tar.gz
 *.tsv.gz
 .DS_Store
