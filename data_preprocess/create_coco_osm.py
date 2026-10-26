@@ -120,7 +120,7 @@ def make_to_px(data, png_width):
     scale = png_width / (x1 - x0)
 
     def to_px(lon, lat):
-        """Convert to pixels in terms of the image pixels"""
+        """Convert to image pixels"""
         px, py = lonlat_to_px(lon, lat, zoom)
         return (px - x0) * scale, (py - y0) * scale
 
