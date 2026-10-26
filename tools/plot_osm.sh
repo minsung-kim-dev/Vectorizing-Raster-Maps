@@ -3,9 +3,10 @@
 # (adapted from Raster2Seq's data_preprocess/tools/plot_data.sh). Runs on CPU.
 #
 # Usage (from anywhere, in the raster2seq env):
-#   bash tools/plot_osm.sh            # val split
+#   bash tools/plot_osm.sh            # first 5 images of the val split
 #   bash tools/plot_osm.sh test       # another split
-#   DEBUG=1 bash tools/plot_osm.sh    # a single image, for a quick check
+#   N=20 bash tools/plot_osm.sh       # first 20 images
+#   N=all bash tools/plot_osm.sh      # every image in the split
 #
 # Outputs per image: --plot_gt (shapes drawn from the annotations), --plot_gt_image (the input
 # image after resize/pad), --plot_density (shapes overlaid on the input image; despite the name it
@@ -22,9 +23,29 @@ REPO=$(cd "$(dirname "$0")/.." && pwd)
 R2S=${R2S:-$REPO/../Raster2Seq}
 DATA=${DATA:-$REPO/data/coco_osm}
 OUT=${OUT:-$REPO/data_plots/osm/$SPLIT}
+N=${N:-5}
 
 # vocabulary size + 1 (Raster2Seq reserves the last class), read from create_coco_osm.py
 SEM_CLASSES=$(cd "$REPO" && python -c "from data_preprocess.create_coco_osm import CATEGORIES; print(len(CATEGORIES) + 1)")
+
+# N: plot only the first N images, via a temporary dataset root (the split's annotations cut down
+# to N images, plus a link to the split's PNG folder). plot_floor.py has no option for this.
+if [[ "$N" != "all" ]]; then
+    SUB=$(mktemp -d "${TMPDIR:-/tmp}/plot_osm.XXXXXX")  # macOS mktemp ignores TMPDIR without a template
+    trap 'rm -rf "$SUB"' EXIT
+    mkdir "$SUB/annotations"
+    ln -s "$DATA/$SPLIT" "$SUB/$SPLIT"
+    python - "$DATA/annotations/$SPLIT.json" "$SUB/annotations/$SPLIT.json" "$N" <<'EOF'
+import json, sys
+src, dst, n = sys.argv[1], sys.argv[2], int(sys.argv[3])
+d = json.load(open(src))
+d["images"] = sorted(d["images"], key=lambda im: im["id"])[:n]
+keep = {im["id"] for im in d["images"]}
+d["annotations"] = [a for a in d["annotations"] if a["image_id"] in keep]
+json.dump(d, open(dst, "w"))
+EOF
+    DATA=$SUB
+fi
 
 cd "$R2S"  # plot_floor.py imports Raster2Seq's modules relative to its repo
 for flag in --plot_gt --plot_gt_image --plot_density --compute_stats; do
@@ -42,5 +63,5 @@ for flag in --plot_gt --plot_gt_image --plot_density --compute_stats; do
                    --image_scale 1 \
                    --num_workers 0 \
                    $flag \
-                   ${DEBUG:+--debug}
+    || [[ $flag == --compute_stats ]]  # stats print first; only their histogram export (needs Chrome) may fail
 done
