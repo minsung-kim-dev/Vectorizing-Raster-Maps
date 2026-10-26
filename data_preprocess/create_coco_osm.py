@@ -16,7 +16,6 @@ import argparse
 import gzip
 import json
 import random
-import shutil
 import sys
 from pathlib import Path
 
@@ -180,11 +179,12 @@ def main(args):
         (out / split).mkdir(exist_ok=True)
         coco = prepare_dict(CATEGORIES)
         for img_id, f in enumerate(split_files):
-            png = pngs[f]
-            w, h = Image.open(png).size
+            png, img = pngs[f], Image.open(pngs[f])
+            w, h = img.size
             with gzip.open(f, "rt") as fh:
                 data = json.load(fh)
-            shutil.copy(png, out / split / png.name)
+            # crops are palette PNGs; Raster2Seq reads images with np.array(), which would give palette indices
+            img.convert("RGB").save(out / split / png.name)
             coco["images"].append({"file_name": png.name, "id": img_id, "width": w, "height": h})
             geoms = extract_geometries(data, make_to_px(data, w))
             anns = build_annotations(geoms, w, h, args.min_area, args.simplify_tol, img_id, ann_id)
