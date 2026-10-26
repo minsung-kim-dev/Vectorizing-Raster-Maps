@@ -2,7 +2,11 @@
 
 ## Installation
 
-- Clone [Raster2Seq](https://github.com/Cornell-VAILab/Raster2Seq) next to this repo (`../Raster2Seq`).
+- Clone [Raster2Seq](https://github.com/Cornell-VAILab/Raster2Seq) next to this repo (`../Raster2Seq`), at the commit this project is tested with:
+  ```shell
+  git clone https://github.com/Cornell-VAILab/Raster2Seq.git ../Raster2Seq
+  git -C ../Raster2Seq checkout a6c4e27   # 2026-06-02
+  ```
 - Create an environment:
   ```shell
   conda create -n raster2seq python=3.10
