@@ -6,6 +6,7 @@ data/tmp
 data/train10000
 data/train10000_png
 data/README.md
+data/coco_osm
 *.tar.gz
 *.tsv.gz
 .DS_Store
