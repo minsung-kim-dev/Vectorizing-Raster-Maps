@@ -18,6 +18,7 @@ OUTPUT_DIR=${OUTPUT_DIR:-$REPO/save_models}
 IMAGE_SIZE=512    # crops are ~1100 px; 256 loses small shapes
 SEQ_LEN=2048      # fits ~90% of crops completely (1024 fits ~50%)
 NUM_BINS=32       # matches Raster2Seq's CubiCasa checkpoint used as the starting point
+ROW_TOL=0.08      # shape order: rows 8% of the image height, top to bottom, left to right (needs the fork)
 CLS_COEFF=5
 COO_COEFF=20
 SEM_COEFF=1
@@ -64,6 +65,7 @@ DATA="$DATA" bash "$REPO/tools/plot_osm.sh" val
 #     --image_size ${IMAGE_SIZE} \
 #     --poly2seq \
 #     --seq_len ${SEQ_LEN} \
+#     --row_tolerance ${ROW_TOL} \
 #     --num_bins ${NUM_BINS} \
 #     --ckpt_every_epoch=50 \
 #     --eval_every_epoch=50 \
@@ -93,6 +95,7 @@ DATA="$DATA" bash "$REPO/tools/plot_osm.sh" val
 #     --image_size ${IMAGE_SIZE} \
 #     --poly2seq \
 #     --seq_len ${SEQ_LEN} \
+#     --row_tolerance ${ROW_TOL} \
 #     --num_bins ${NUM_BINS} \
 #     --ckpt_every_epoch=50 \
 #     --eval_every_epoch=50 \
