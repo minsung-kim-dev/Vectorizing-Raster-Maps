@@ -19,3 +19,4 @@ crops/
 *.osm.pbf
 
 results/
+__pycache__/
