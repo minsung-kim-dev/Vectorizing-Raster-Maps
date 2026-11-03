@@ -18,3 +18,4 @@ crops/
 *.mbtiles
 *.osm.pbf
 
+results/

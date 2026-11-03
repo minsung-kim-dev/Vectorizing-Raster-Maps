@@ -59,3 +59,17 @@ Labels come from the fixed vocabulary `VOCAB` in `create_coco_osm.py` (e.g. `str
 `data/coco_osm/` is about 2.6 GB and can be regenerated with the command above, so don't commit it to git.
 
 `_scratch/eda.ipynb` walks through the conversion for a single crop and plots the result against the PNG.
+
+## Baselines
+
+### Colour threshold (no learning)
+
+`baselines/color_threshold.py` finds shapes by their known map colours (OpenCV contours for areas, skeletons for roads/rails/paths) and scores them against the COCO annotations, per label. It only needs the COCO dataset, not Raster2Seq, and runs on CPU (about 10 s per crop).
+
+```shell
+pip install opencv-python-headless scikit-image shapely numpy pillow matplotlib
+python baselines/color_threshold.py                                     # mini test set: 12 Queens crops
+python baselines/color_threshold.py --data data/coco_osm --split test   # full Queens test set
+```
+
+Writes `results/color_threshold/<split>/per_label.csv` (true / predicted / matched shapes, precision, recall, F1, pixel IoU), `per_image.csv`, and side-by-side plots. Shapes match when they share a label and overlap with IoU ≥ 0.5 (lines widened to 6 px first), the same rule as `notebooks/simple_baselines.ipynb`. For lines, pixel IoU is the fairer number: the baseline cuts roads at every junction while OSM splits them wherever a street's tags change, so pieces rarely line up one-to-one.
