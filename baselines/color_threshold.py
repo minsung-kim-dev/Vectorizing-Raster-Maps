@@ -10,15 +10,20 @@ The crops are drawn with a fixed palette (utils/render_carto.py), so many labels
 
 Scored against the COCO annotations made by data_preprocess/create_coco_osm.py, at the PNG's own
 resolution (no Raster2Seq install needed), two ways:
-  - Shapes: one-to-one matching within each label, IoU >= --iou (greedy, best pairs first); lines are
-    widened to --line_width px bands first. Same rule as notebooks/simple_baselines.ipynb, so a
+  - Shapes: one-to-one matching within each label, IoU >= --iou (greedy, best pairs first). Same rule as notebooks/simple_baselines.ipynb, so a
     Raster2Seq prediction can be scored the same way later.
   - Pixels: per-label IoU of the drawn masks (predicted shapes vs. true shapes, both rasterized).
+
+Lines are scored as buffered polygons, the way Raster2Seq is trained on them (Minsung's
+--line_buffer_px in create_coco_osm.py): predicted lines, and any true lines that are still lines,
+are widened by --line_buffer_px px on each side (default 2). Use a dataset built with the same
+--line_buffer_px. --line_buffer_px 0 scores lines as centrelines instead, widened to --line_width bands.
 
 Usage:
     pip install opencv-python-headless scikit-image shapely numpy pillow matplotlib
     python baselines/color_threshold.py                                # mini test set (12 Queens crops)
     python baselines/color_threshold.py --data data/coco_osm --split test --plots 10
+    python baselines/color_threshold.py --data data/coco_osm_buffered --line_buffer_px 2
 
 Writes to --out (default results/color_threshold/<split>/):
     per_label.csv   label, true / predicted / matched shapes, precision, recall, F1, pixel IoU
@@ -126,12 +131,12 @@ def predict(arr, tol=12, pool_max=3000.0, min_area=20.0):
     idx = nearest_color(arr, tol)
     shapes = []
     for label, hexes in POLY_COLORS.items():
-        shapes += [{"label": label, "points": pts}
+        shapes += [{"label": label, "kind": "polygon", "points": pts}
                    for _, pts in mask_to_polygons(color_mask(idx, hexes), min_area)]
     for area, pts in mask_to_polygons(color_mask(idx, [WATER_COLOR]), min_area):
-        shapes.append({"label": "pool" if area < pool_max else "water", "points": pts})
+        shapes.append({"label": "pool" if area < pool_max else "water", "kind": "polygon", "points": pts})
     for label, hexes in LINE_COLORS.items():
-        shapes += [{"label": label, "points": pts} for pts in mask_to_lines(color_mask(idx, hexes))]
+        shapes += [{"label": label, "kind": "line", "points": pts} for pts in mask_to_lines(color_mask(idx, hexes))]
     return shapes
 
 
@@ -146,12 +151,29 @@ def load_coco(data, split):
     by_image = collections.defaultdict(list)
     for a in coco["annotations"]:
         pts = np.asarray(a["segmentation"][0], float).reshape(-1, 2).tolist()
-        by_image[a["image_id"]].append({"label": names[a["category_id"]], "points": pts})
+        kind = "line" if a.get("geom_type") == "line" else "polygon"  # buffered lines are polygons
+        by_image[a["image_id"]].append({"label": names[a["category_id"]], "kind": kind, "points": pts,
+                                        "buffered": a.get("source_geom_type") == "line"})
     return coco["images"], by_image
 
 
+def buffer_lines(shapes, radius):
+    """Turn every line into a polygon by widening it `radius` px on each side (outer ring only)."""
+    out = []
+    for s in shapes:
+        if s["kind"] != "line":
+            out.append(s)
+            continue
+        g = LineString(s["points"]).buffer(radius).simplify(0.5)
+        if g.geom_type == "MultiPolygon":
+            g = max(g.geoms, key=lambda p: p.area)
+        if g.geom_type == "Polygon" and not g.is_empty:
+            out.append({**s, "kind": "polygon", "points": [list(p) for p in g.exterior.coords[:-1]]})
+    return out
+
+
 def geometry(s, line_width):
-    if s["label"] in LINE_LABELS:
+    if s["kind"] == "line":
         return LineString(s["points"]).buffer(line_width / 2)
     return Polygon(s["points"]).buffer(0)
 
@@ -190,7 +212,7 @@ def rasterize(shapes, shape_hw, line_width):
     for s in shapes:
         m = masks.setdefault(s["label"], np.zeros(shape_hw, np.uint8))
         pts = np.round(np.asarray(s["points"])).astype(np.int32).reshape(-1, 1, 2)
-        if s["label"] in LINE_LABELS:
+        if s["kind"] == "line":
             cv2.polylines(m, [pts], False, 1, thickness=max(1, int(round(line_width))))
         else:
             cv2.fillPoly(m, [pts], 1)
@@ -214,7 +236,7 @@ def plot(img, gt, pred, path):
                                           (f"colour threshold ({len(pred)})", pred)]):
         ax.imshow(img, alpha=1 if shapes is None else 0.35)
         for s in shapes or []:
-            is_poly = s["label"] not in LINE_LABELS
+            is_poly = s["kind"] != "line"
             ax.add_patch(MplPolygon(s["points"], closed=is_poly, fill=is_poly, facecolor=colors[s["label"]],
                                     edgecolor=colors[s["label"]], alpha=0.6, linewidth=0.6 if is_poly else 1.2))
         ax.set(title=title, xlim=(0, img.width), ylim=(img.height, 0), aspect="equal")
@@ -247,7 +269,11 @@ def config():
     a.add_argument("--pool_max", type=float, default=3000.0, help="blue areas below this (px^2) are pools")
     a.add_argument("--min_area", type=float, default=20.0, help="drop predicted polygons below this (px^2)")
     a.add_argument("--iou", type=float, default=0.5, help="IoU needed for a shape to count as matched")
-    a.add_argument("--line_width", type=float, default=6.0, help="band width (px) lines are widened to")
+    a.add_argument("--line_buffer_px", type=float, default=2.0,
+                   help="score lines as polygons widened this many px on each side, like create_coco_osm.py's "
+                        "--line_buffer_px; 0 = score lines as centrelines")
+    a.add_argument("--line_width", type=float, default=6.0,
+                   help="with --line_buffer_px 0: band width (px) centrelines are widened to for scoring")
     return a.parse_args()
 
 
@@ -257,6 +283,11 @@ def main(args):
     images, gts = load_coco(args.data, args.split)
     if args.limit:
         images = images[:args.limit]
+    if any(s["buffered"] for g in gts.values() for s in g):
+        print("dataset lines are buffered (source_geom_type = line): make sure --line_buffer_px matches the "
+              f"value used in create_coco_osm.py (using {args.line_buffer_px})")
+        if not args.line_buffer_px:
+            print("warning: --line_buffer_px 0 compares predicted centrelines with buffered true lines")
 
     n_pred, n_gt, hits = collections.Counter(), collections.Counter(), collections.Counter()
     inter, union = collections.Counter(), collections.Counter()
@@ -265,6 +296,8 @@ def main(args):
         img = Image.open(Path(args.data) / args.split / info["file_name"]).convert("RGB")
         arr = np.array(img)
         gt, pred = gts[info["id"]], predict(arr, args.tol, args.pool_max, args.min_area)
+        if args.line_buffer_px:
+            gt, pred = buffer_lines(gt, args.line_buffer_px), buffer_lines(pred, args.line_buffer_px)
 
         h = match(pred, gt, args.line_width, args.iou)
         np_, ng = collections.Counter(s["label"] for s in pred), collections.Counter(s["label"] for s in gt)
