@@ -7,14 +7,25 @@ Output (readable by Raster2Seq datasets/poly_data.py -> ConvertToCocoDict):
 Each OpenMapTiles (layer, class) is mapped to a label from the fixed vocabulary VOCAB
 (e.g. "street", "building", "park"); anything not in VOCAB is labelled "unknown" (polygons)
 or "unknown_line" (lines).
-Polygons are stored as closed rings (closing point dropped, corners resorted).
-LineStrings are stored start -> finish, are NOT resorted, and carry "geom_type": "line"
-(polygons: "polygon") so the loader can skip resort_corners for them.
+By default, polygons and lines are saved as in create_coco_osm.py. If --line_buffer_px
+is provided, lines are buffered into closed polygons in pixel space. Buffered annotations
+also include source_geom_type to record whether the original geometry was a line or polygon.
 """
+
+# Example commands (run from the project root with the raster2seq environment active):
+#
+# Convert one crop without buffering (keep line features as lines):
+# python data_preprocess/create_coco_osm.py --data_root crops \
+#   --output data/coco_osm_no_buffer --sample_name queens_05319
+#
+# Convert the same crop with a 2-pixel line buffer radius:
+# python data_preprocess/create_coco_osm.py --data_root crops \
+#   --output data/coco_osm_buffer --sample_name queens_05319 --line_buffer_px 2
 
 import argparse
 import gzip
 import json
+import math
 import random
 import sys
 from pathlib import Path
@@ -40,7 +51,8 @@ PARTS = {
 }
 # label -> OpenMapTiles keys: (layer, class), (layer, class, geom_type), or (layer, "*") for any class.
 # Anything not listed (and not in SKIP) is labelled "unknown" / "unknown_line" (e.g. military areas / ferries).
-# Each label holds only polygons or only lines, since Raster2Seq treats every shape as closed.
+# Labels distinguish the original polygon and line categories. Buffered lines
+# keep their original labels even though their output geometry becomes a polygon.
 VOCAB = {
     "building":     [("building", "*")],
     "highway":      [("transportation", c) for c in ("motorway", "motorway_construction", "trunk")],
@@ -126,11 +138,34 @@ def make_to_px(data, png_width):
     return to_px
 
 
-def build_annotations(geoms, width, height, min_area=20.0, simplify_tol=1.0, img_id=0, start_id=0):
-    """COCO annotations for one image from extract_geometries output.
-    Shapes are simplified with tolerance simplify_tol px."""
-    anns = []
+def buffer_line_geometries(geoms, radius_px):
+    """Convert each line into its own polygon with the requested pixel-radius buffer."""
+    if radius_px <= 0:
+        raise ValueError("line_buffer_px must be greater than zero")
+
+    buffered_geoms = []
     for pts, label, geom_type in geoms:
+        if geom_type != "line":
+            buffered_geoms.append((pts, label, geom_type, geom_type))
+            continue
+
+        line_area = LineString(pts).buffer(radius_px, cap_style=2, join_style=2)
+        parts = list(line_area.geoms) if line_area.geom_type == "MultiPolygon" else [line_area]
+        for polygon in parts:
+            if polygon.is_empty or polygon.geom_type != "Polygon":
+                continue
+            ring = np.asarray(polygon.exterior.coords[:-1], dtype=np.float64)
+            if len(ring) >= 3:
+                buffered_geoms.append((ring.tolist(), label, "polygon", "line"))
+
+    return buffered_geoms
+
+
+def build_annotations(geoms, width, height, min_area=20.0, simplify_tol=1.0, img_id=0, start_id=0):
+    """COCO annotations for one image; optional 4th tuple item records the source geometry type."""
+    anns = []
+    for item in geoms:
+        pts, label, geom_type = item[:3]
         is_poly = geom_type == "polygon"
         # uses shapely method simpify
         shape = (Polygon if is_poly else LineString)(pts).simplify(simplify_tol)
@@ -140,12 +175,16 @@ def build_annotations(geoms, width, height, min_area=20.0, simplify_tol=1.0, img
             pts = resort_corners(np.asarray(shape.exterior.coords[:-1])).reshape(-1, 2)  # drop closing point
         else:
             pts = np.asarray(shape.coords)
-        anns.append({
+        annotation = {
             "id": start_id + len(anns), "image_id": img_id, "iscrowd": 0,
             "category_id": CATEGORIES[label], "geom_type": geom_type,
             "segmentation": [pts.reshape(-1).tolist()], "area": shape.area,
             "bbox": create_coco_bounding_box(pts[:, 0], pts[:, 1], width, height, bound_pad=2),
-        })
+        }
+        # Only buffered runs add a fourth item recording the original geometry type.
+        if len(item) > 3:
+            annotation["source_geom_type"] = item[3]
+        anns.append(annotation)
     return anns
 
 
@@ -158,7 +197,16 @@ def config():
     a.add_argument("--min_area", default=20.0, type=float, help="drop polygons smaller than this (px^2)")
     a.add_argument("--simplify_tol", default=1.0, type=float, help="shape simplification tolerance (px); 0 = off")
     a.add_argument("--seed", default=0, type=int)
-    return a.parse_args()
+    a.add_argument("--line_buffer_px", default=None, type=float,
+                   help="buffer radius in PNG pixels for line features; omit to keep lines unbuffered")
+    a.add_argument("--sample_name", default="", type=str,
+                   help="convert only this crop basename (without .geojson.gz), and write it to test")
+    a.add_argument("--max_crops", default=0, type=int,
+                   help="optional maximum number of paired crops to convert (0 means all)")
+    args = a.parse_args()
+    if args.line_buffer_px is not None and (not math.isfinite(args.line_buffer_px) or args.line_buffer_px <= 0):
+        a.error("--line_buffer_px must be greater than 0 and finite; omit it to disable buffering")
+    return args
 
 
 def main(args):
@@ -166,11 +214,20 @@ def main(args):
     pngs = {f: f.with_name(f.name.replace(".geojson.gz", ".png")) for f in sorted(root.glob("*.geojson.gz"))}
     pngs = {f: p for f, p in pngs.items() if p.exists()}
 
-    is_test = lambda f: f.name.startswith(f"{args.test_borough}_")
-    rest = [f for f in pngs if not is_test(f)]
-    random.Random(args.seed).shuffle(rest)
-    n_val = int(args.val_frac * len(rest))
-    splits = {"train": rest[n_val:], "val": rest[:n_val], "test": [f for f in pngs if is_test(f)]}
+    if args.sample_name:
+        expected = f"{args.sample_name}.geojson.gz"
+        pngs = {f: p for f, p in pngs.items() if f.name == expected}
+        if not pngs:
+            raise FileNotFoundError(f"No paired GeoJSON/PNG crop found for {expected} in {root}")
+        splits = {"test": list(pngs)}
+    else:
+        if args.max_crops > 0:
+            pngs = dict(list(pngs.items())[:args.max_crops])
+        is_test = lambda f: f.name.startswith(f"{args.test_borough}_")
+        rest = [f for f in pngs if not is_test(f)]
+        random.Random(args.seed).shuffle(rest)
+        n_val = int(args.val_frac * len(rest))
+        splits = {"train": rest[n_val:], "val": rest[:n_val], "test": [f for f in pngs if is_test(f)]}
 
     # write images + COCO json per split (category ids come from the fixed VOCAB)
     (out / "annotations").mkdir(parents=True, exist_ok=True)
@@ -187,6 +244,9 @@ def main(args):
             img.convert("RGB").save(out / split / png.name)
             coco["images"].append({"file_name": png.name, "id": img_id, "width": w, "height": h})
             geoms = extract_geometries(data, make_to_px(data, w))
+            # Keep the original line coordinates unless a buffer radius was supplied.
+            if args.line_buffer_px is not None:
+                geoms = buffer_line_geometries(geoms, args.line_buffer_px)
             anns = build_annotations(geoms, w, h, args.min_area, args.simplify_tol, img_id, ann_id)
             coco["annotations"] += anns
             ann_id += len(anns)
