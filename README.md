@@ -37,6 +37,22 @@ conda activate raster2seq
 python data_preprocess/create_coco_osm.py --data_root crops --output data/coco_osm
 ```
 
+By default, line features remain lines. To convert line features (such as roads,
+railways, and waterways) into buffered polygons, pass a positive buffer radius in
+the original PNG's pixel units:
+
+```shell
+python data_preprocess/create_coco_osm.py --data_root crops \
+  --output data/coco_osm_buffer --line_buffer_px 2
+```
+
+For example, a radius of 2 pixels extends approximately 2 pixels on each side of
+a line. Use a separate output directory to keep buffered and unbuffered datasets.
+Buffered lines are saved as polygons with their original category labels. In a
+buffered run, annotations also include `source_geom_type` to record whether the
+original geometry was a `line` or `polygon`. Without buffering, that field is not
+added. Buffered polygons are also subject to `--min_area` and `--simplify_tol`.
+
 This writes the layout Raster2Seq expects:
 ```
 data/coco_osm/
@@ -53,6 +69,21 @@ Options:
 - `--min_area` – drop polygons smaller than this, in px² (default `20`)
 - `--simplify_tol` – shape simplification tolerance in px, `0` = off (default `1.0`)
 - `--seed` – random seed for the train/val split (default `0`)
+- `--line_buffer_px` – buffer radius in original PNG pixels for line features; must be positive (default: no buffering)
+- `--sample_name` – convert one paired crop by name, without the file extension; writes it to the test split
+- `--max_crops` – convert at most this many paired crops in filename order, before splitting (default `0` = all)
+
+Limiting crops before splitting can leave a validation or test split empty.
+
+For example, to convert and inspect just one crop with buffering:
+
+```shell
+python data_preprocess/create_coco_osm.py --data_root crops \
+  --output data/coco_osm_sample --sample_name queens_01156 --line_buffer_px 2
+```
+
+This single-crop example writes `test/queens_01156.png` and `annotations/test.json`.
+When `--sample_name` is supplied, it takes precedence over `--max_crops`.
 
 Labels come from the fixed vocabulary `VOCAB` in `create_coco_osm.py` (e.g. `street`, `building`, `park`). Anything not listed becomes `unknown` / `unknown_line`. When training with labels, set `--semantic_classes` to the number of labels + 1 (Raster2Seq reserves the last class). Rerun the conversion after any change to `VOCAB`, because category IDs follow its order.
 
