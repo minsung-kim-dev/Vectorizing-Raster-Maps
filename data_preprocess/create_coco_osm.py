@@ -238,7 +238,7 @@ def main(args):
         for img_id, f in enumerate(split_files):
             png, img = pngs[f], Image.open(pngs[f])
             w, h = img.size
-            with gzip.open(f, "rt") as fh:
+            with gzip.open(f, "rt", encoding="utf-8") as fh:
                 data = json.load(fh)
             # crops are palette PNGs; Raster2Seq reads images with np.array(), which would give palette indices
             img.convert("RGB").save(out / split / png.name)

@@ -52,7 +52,7 @@ MODEL_INPUT = 512  # Raster2Seq's --image_size; geometry bins are measured at th
 
 def load_coco(data, split):
     """(images, {image_id: [shape]}) with shape = {"label", "kind", "points", "buffered"}."""
-    with open(Path(data) / "annotations" / f"{split}.json") as fh:
+    with open(Path(data) / "annotations" / f"{split}.json", encoding="utf-8") as fh:
         coco = json.load(fh)
     names = {c["id"]: c["name"] for c in coco["categories"]}
     by_image = collections.defaultdict(list)
@@ -65,13 +65,13 @@ def load_coco(data, split):
 
 
 def load_predictions(path):
-    with open(path) as fh:
+    with open(path, encoding="utf-8") as fh:
         d = json.load(fh)
     return d.get("method", Path(path).stem), d["images"]
 
 
 def save_predictions(path, method, images):
-    with open(path, "w") as fh:
+    with open(path, "w", encoding="utf-8") as fh:
         json.dump({"method": method, "images": images}, fh)
 
 
@@ -234,7 +234,7 @@ def f1(p, r):
 
 
 def write_csv(path, rows):
-    with open(path, "w", newline="") as fh:
+    with open(path, "w", newline="", encoding="utf-8") as fh:
         w = csv.DictWriter(fh, fieldnames=list(rows[0]))
         w.writeheader()
         w.writerows(rows)
@@ -340,7 +340,7 @@ def score(data, split, predictions, out, method="prediction", line_buffer_px=2.0
     write_csv(out / "per_label.csv", table)
     write_csv(out / "per_image.csv", rows)
     write_csv(out / "per_bin.csv", bin_rows)
-    with open(out / "summary.json", "w") as fh:
+    with open(out / "summary.json", "w", encoding="utf-8") as fh:
         json.dump(summary, fh, indent=2)
 
     print(f"\n{'label':<13} {'true':>5} {'pred':>5} {'match':>6} {'prec':>6} {'recall':>7} {'f1':>6} {'pix IoU':>8}")
