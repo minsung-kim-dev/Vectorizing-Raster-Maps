@@ -79,19 +79,27 @@ def save_predictions(path, method, images):
 # Geometry
 # ---------------------------------------------------------------------------------------------
 
-def buffer_lines(shapes, radius):
-    """Turn every line into a polygon by widening it `radius` px on each side (outer ring only)."""
-    out = []
-    for s in shapes:
+def buffer_lines(shapes, radius, simplify_tol=1.0, min_area=20.0, return_index=False):
+    """Turn every line into polygons widened `radius` px on each side, exactly as
+    create_coco_osm.py --line_buffer_px does (flat ends, mitred corners, one polygon per part,
+    then its --simplify_tol 1.0 and --min_area 20 defaults). Polygons pass through unchanged.
+    With return_index, also return the index of the input shape each output came from."""
+    out, index = [], []
+    for k, s in enumerate(shapes):
         if s["kind"] != "line":
             out.append(s)
+            index.append(k)
             continue
-        g = LineString(s["points"]).buffer(radius).simplify(0.5)
-        if g.geom_type == "MultiPolygon":
-            g = max(g.geoms, key=lambda p: p.area)
-        if g.geom_type == "Polygon" and not g.is_empty:
-            out.append({**s, "kind": "polygon", "points": [list(p) for p in g.exterior.coords[:-1]]})
-    return out
+        g = LineString(s["points"]).buffer(radius, cap_style=2, join_style=2)
+        for part in (g.geoms if g.geom_type == "MultiPolygon" else [g]):
+            if part.is_empty or part.geom_type != "Polygon" or len(part.exterior.coords) < 4:
+                continue
+            part = part.simplify(simplify_tol) if simplify_tol else part
+            if part.geom_type != "Polygon" or part.area < min_area:
+                continue
+            out.append({**s, "kind": "polygon", "points": [list(p) for p in part.exterior.coords[:-1]]})
+            index.append(k)
+    return (out, index) if return_index else out
 
 
 def geometry(s, line_width):
@@ -274,11 +282,10 @@ def score(data, split, predictions, out, method="prediction", line_buffer_px=2.0
         bins = geometry_bins(gt_raw, w, h)
         gt = gt_raw
         if line_buffer_px:
-            # buffer_lines keeps polygons as they are and drops nothing for valid lines, so indices line up
-            gt, pred = buffer_lines(gt_raw, line_buffer_px), buffer_lines(pred, line_buffer_px)
-            if len(gt) != len(gt_raw):  # a degenerate true line was dropped: recompute bins to stay aligned
-                keep = [s for s in gt_raw if s["kind"] != "line" or len(buffer_lines([s], line_buffer_px))]
-                gt, bins = buffer_lines(keep, line_buffer_px), geometry_bins(keep, w, h)
+            # one true line can become several polygons (or none): each keeps its source shape's bins
+            gt, index = buffer_lines(gt_raw, line_buffer_px, return_index=True)
+            bins = [bins[k] for k in index]
+            pred = buffer_lines(pred, line_buffer_px)
 
         pairs = match(pred, gt, line_width, iou)
         matched_gt = {j for _, j in pairs}
