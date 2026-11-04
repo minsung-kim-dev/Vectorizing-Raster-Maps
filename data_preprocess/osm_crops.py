@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
-"""Cut OpenMapTiles vector tiles into GeoJSON crops and render them with render_carto.py.
+"""Cut OpenMapTiles vector tiles into GeoJSON crops and render them with utils/render_carto.py
+(default) or utils/render_omt.py (--style omt, the OSM OpenMapTiles style).
 
 Make the tiles once with Planetiler:
     java -Xmx2g -jar planetiler.jar --download --osm-path=NewYork.osm.pbf --output=newyork.mbtiles
 Then:
     pip install mapbox-vector-tile shapely numpy matplotlib pillow
-    python osm_crops.py --mbtiles newyork.mbtiles --boxes boxes.csv --zoom 18
+    python osm_crops.py --mbtiles newyork.mbtiles --boxes boxes.csv --zoom 18 [--style omt]
 
 boxes.csv:  name,min_lon,min_lat,max_lon,max_lat
 Writes <name>.geojson.gz and <name>.png per box, plus index.csv.
 Data comes from the highest tile zoom (14); --zoom only sets the render zoom.
+With --style omt the GeoJSON also keeps house numbers and all POIs, which that style draws
+(they are points, so data_preprocess/create_coco_osm.py ignores them).
 """
 import argparse, csv, gzip, json, os, re, sqlite3, sys, time
 from functools import lru_cache
@@ -21,19 +24,22 @@ import shapely
 from PIL import Image
 from shapely.geometry import mapping, shape
 
-sys.path.insert(0, "data/osm_carto_compare")
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "utils"))
 import render_carto as rc
+import render_omt as ro
 from render_carto import lonlat_to_px, pixel_window
 
 DB = None  # one read-only connection per worker process
 ALL_NAMES = False  # keep every name:xx translation (--all-names)
-NAMES = {"name", "name_en", "name_int"}  # names render_carto.py can use
-SKIP_LAYERS = {"housenumber"}  # left out of the GeoJSON
-POI_CLASSES = {"railway"}  # the only poi features kept (stations, drawn by render_carto.py)
-# every colour written in render_carto.py; palette PNGs always keep these exactly
-STYLE_COLOURS = np.array(sorted({tuple(int(h[i:i + 2], 16) for i in (1, 3, 5))
-                                 for h in re.findall(r"#[0-9a-fA-F]{6}\b", open(rc.__file__).read())}))
+NAMES = {"name", "name_en", "name_int"}  # names the renderers can use
+SKIP_LAYERS = {"housenumber"}  # left out of the GeoJSON (--style carto; omt keeps everything)
+POI_CLASSES = {"railway"}  # the only poi features kept with --style carto (stations); omt keeps all
+# every colour each style uses; palette PNGs always keep these exactly
+STYLE_COLOURS = {
+    "carto": np.array(sorted({tuple(int(h[i:i + 2], 16) for i in (1, 3, 5))
+                              for h in re.findall(r"#[0-9a-fA-F]{6}\b", open(rc.__file__).read())})),
+    "omt": np.array(ro.style_colours()),
+}
 
 
 def px_to_lonlat(x, y, z):
@@ -73,7 +79,7 @@ def load_tile(z, x, y):
             continue
         scale = d.get("extent", 4096)
         for f in d["features"]:
-            if layer == "poi" and f["properties"].get("class") not in POI_CLASSES:
+            if layer == "poi" and POI_CLASSES is not None and f["properties"].get("class") not in POI_CLASSES:
                 continue
             g = shapely.transform(shape(f["geometry"]), lambda xy: xy / scale)
             if g.geom_type == "Point" and not (0 <= g.x < 1 and 0 <= g.y < 1):
@@ -112,13 +118,13 @@ LUT = np.zeros(2 ** 24, np.uint8)  # colour -> palette index, reused for every i
 SEEN = np.zeros(2 ** 24, bool)  # scratch space for finding an image's distinct colours
 
 
-def shrink_png(path, colours):
+def shrink_png(path, colours, style_colours):
     """Rewrite a render as a palette PNG with `colours` colours (about 60% smaller): all of
-    render_carto's colours stay exact, the rest of the palette comes from the image itself."""
+    the style's colours stay exact, the rest of the palette comes from the image itself."""
     im = Image.open(path).convert("RGB")
-    n = colours - len(STYLE_COLOURS)
+    n = colours - len(style_colours)
     extra = im.quantize(n, method=Image.Quantize.MEDIANCUT).getpalette()[:3 * n]
-    palette = np.vstack([STYLE_COLOURS, np.array(extra).reshape(-1, 3)]).astype(np.int32)
+    palette = np.vstack([style_colours, np.array(extra).reshape(-1, 3)]).astype(np.int32)
     rgb = np.asarray(im).astype(np.int32)
     keys = (rgb[..., 0] << 16) | (rgb[..., 1] << 8) | rgb[..., 2]  # one number per colour
     SEEN[keys] = True
@@ -145,9 +151,10 @@ def make_crop(job):
                        "features": features}, fh, ensure_ascii=False, separators=(",", ":"))
         size = ""
         if not a.no_images:
-            size = "x".join(map(str, rc.render(gj, png, a.zoom, a.scale)["size"]))
+            renderer = ro if a.style == "omt" else rc
+            size = "x".join(map(str, renderer.render(gj, png, a.zoom, a.scale)["size"]))
             if a.colours:
-                shrink_png(png, a.colours)
+                shrink_png(png, a.colours, STYLE_COLOURS[a.style])
         row = dict(name=name, features=len(features), size=size, zoom=a.zoom, source_zoom=z,
                    min_lon=bbox[0], min_lat=bbox[1], max_lon=bbox[2], max_lat=bbox[3])
         return row, f"{name}: {len(features)} features {size} ({time.time() - t:.1f}s)"
@@ -155,9 +162,12 @@ def make_crop(job):
         return None, f"{name}: ERROR {e!r}"
 
 
-def init_worker(path, all_names):
-    global DB, ALL_NAMES
+def init_worker(path, all_names, style):
+    global DB, ALL_NAMES, SKIP_LAYERS, POI_CLASSES, NAMES
     DB, ALL_NAMES = open_mbtiles(path), all_names
+    if style == "omt":  # the OpenMapTiles style draws house numbers and POI labels, using name:en etc.
+        SKIP_LAYERS, POI_CLASSES = set(), None
+        NAMES = NAMES | {"name:en", "name:latin", "name:nonlatin"}
 
 
 def main():
@@ -174,9 +184,13 @@ def main():
     ap.add_argument("--all-names", action="store_true", help="keep names in every language")
     ap.add_argument("--colours", type=int, default=256,
                     help="PNG palette size (default 256, max 256); 0 = full-colour PNGs")
+    ap.add_argument("--style", choices=["carto", "omt"], default="carto",
+                    help="carto = utils/render_carto.py (default); omt = utils/render_omt.py, the OSM "
+                         "OpenMapTiles style (also keeps house numbers and all POIs in the GeoJSON)")
     a = ap.parse_args()
-    if a.colours and not len(STYLE_COLOURS) < a.colours <= 256:
-        sys.exit(f"[error] --colours must be 0 or {len(STYLE_COLOURS) + 1}-256")
+    n_style = len(STYLE_COLOURS[a.style])
+    if a.colours and not n_style < a.colours <= 256:
+        sys.exit(f"[error] --colours must be 0 or {n_style + 1}-256 for --style {a.style}")
     os.makedirs(a.out, exist_ok=True)
 
     z = min(open_mbtiles(a.mbtiles).execute("SELECT MAX(zoom_level) FROM tiles").fetchone()[0], a.zoom)
@@ -188,7 +202,7 @@ def main():
     jobs.sort(key=lambda j: tuple(int(v // 256) for v in lonlat_to_px(j[1][0], j[1][3], z)))
 
     index = []
-    with Pool(a.workers, initializer=init_worker, initargs=(a.mbtiles, a.all_names)) as pool:
+    with Pool(a.workers, initializer=init_worker, initargs=(a.mbtiles, a.all_names, a.style)) as pool:
         for n, (row, msg) in enumerate(pool.imap_unordered(make_crop, jobs, chunksize=8), 1):
             print(f"[{n}/{len(jobs)}] {msg}")
             index += [row] if row else []

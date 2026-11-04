@@ -81,10 +81,10 @@ def save_predictions(path, method, images):
 # Geometry
 # ---------------------------------------------------------------------------------------------
 
-def buffer_lines(shapes, radius, simplify_tol=1.0, min_area=20.0, return_index=False):
+def buffer_lines(shapes, radius, simplify_tol=2.0, min_area=20.0, return_index=False):
     """Turn every line into polygons widened `radius` px on each side, exactly as
     create_coco_osm.py --line_buffer_px does (flat ends, mitred corners, one polygon per part,
-    then its --simplify_tol 1.0 and --min_area 20 defaults). Polygons pass through unchanged.
+    then its --simplify_tol 2.0 and --min_area 20 defaults). Polygons pass through unchanged.
     With return_index, also return the index of the input shape each output came from."""
     out, index = [], []
     for k, s in enumerate(shapes):

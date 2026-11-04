@@ -8,6 +8,8 @@ shore will include some water, and a few may spill slightly into NJ.
 
 Usage:
   python make_boxes.py --n 3000 --min-m 150 --max-m 2500 --seed 42 --out boxes.csv
+  python make_boxes.py --n 15000 --min-m 115 --max-m 115 --test-frac 0.1 --holdout queens --out boxes.csv
+      (90% of boxes in the other boroughs, 10% in the held-out borough)
 """
 import argparse
 import math
@@ -52,21 +54,11 @@ BOROUGHS = {  # rough (lon, lat) outlines
 }
 
 
-def main():
-    p = argparse.ArgumentParser()
-    p.add_argument("--n", type=int, default=3000)
-    p.add_argument("--min-m", type=float, default=150, help="smallest box side, meters")
-    p.add_argument("--max-m", type=float, default=2500, help="largest box side, meters")
-    p.add_argument("--seed", type=int, default=42)
-    p.add_argument("--out", default="boxes.csv")
-    a = p.parse_args()
-
-    rng = random.Random(a.seed)
-    polys = {k: Polygon(v) for k, v in BOROUGHS.items()}
-    names, weights = list(polys), [polys[k].area for k in polys]  # area-weighted
-
+def sample_boxes(rng, polys, n, min_m, max_m, start=0):
+    """n boxes (name, min_lon, min_lat, max_lon, max_lat, w_m, h_m) inside polys, area-weighted."""
+    names, weights = list(polys), [polys[k].area for k in polys]
     rows = []
-    while len(rows) < a.n:
+    while len(rows) < n:
         boro = rng.choices(names, weights)[0]
         poly = polys[boro]
         minx, miny, maxx, maxy = poly.bounds
@@ -74,12 +66,36 @@ def main():
         if not poly.contains(lon, lat):
             continue
         # log-uniform size so small and large boxes are both well represented
-        w = math.exp(rng.uniform(math.log(a.min_m), math.log(a.max_m)))
+        w = math.exp(rng.uniform(math.log(min_m), math.log(max_m)))
         h = w * rng.uniform(0.75, 1.33)
         dlat = h / 111_320 / 2
         dlon = w / (111_320 * math.cos(math.radians(lat))) / 2
-        rows.append((f"{boro}_{len(rows) + 1:05d}", lon - dlon, lat - dlat,
+        rows.append((f"{boro}_{start + len(rows) + 1:05d}", lon - dlon, lat - dlat,
                      lon + dlon, lat + dlat, round(w), round(h)))
+    return rows
+
+
+def main():
+    p = argparse.ArgumentParser()
+    p.add_argument("--n", type=int, default=3000)
+    p.add_argument("--min-m", type=float, default=150, help="smallest box side, meters")
+    p.add_argument("--max-m", type=float, default=2500, help="largest box side, meters")
+    p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--out", default="boxes.csv")
+    p.add_argument("--test-frac", type=float, default=None,
+                   help="fraction of boxes in the held-out borough (e.g. 0.1); default: all boroughs area-weighted")
+    p.add_argument("--holdout", default="queens", choices=list(BOROUGHS), help="held-out borough for --test-frac")
+    a = p.parse_args()
+
+    rng = random.Random(a.seed)
+    polys = {k: Polygon(v) for k, v in BOROUGHS.items()}
+    if a.test_frac is None:
+        rows = sample_boxes(rng, polys, a.n, a.min_m, a.max_m)
+    else:
+        n_test = round(a.n * a.test_frac)
+        rest = {k: v for k, v in polys.items() if k != a.holdout}
+        rows = sample_boxes(rng, rest, a.n - n_test, a.min_m, a.max_m)
+        rows += sample_boxes(rng, {a.holdout: polys[a.holdout]}, n_test, a.min_m, a.max_m, start=len(rows))
 
     with open(a.out, "w") as f:
         f.write("name,min_lon,min_lat,max_lon,max_lat,width_m,height_m\n")
