@@ -7,6 +7,10 @@ Output (readable by Raster2Seq datasets/poly_data.py -> ConvertToCocoDict):
 Each OpenMapTiles (layer, class) is mapped to a label from the fixed vocabulary VOCAB
 (e.g. "street", "building", "park"); anything not in VOCAB is labelled "unknown" (polygons)
 or "unknown_line" (lines).
+Shapes are clipped to the image rectangle (parts outside it are dropped, so nothing is squashed
+onto the border) and simplified. Polygons are stored as closed rings (closing point dropped,
+corners resorted). LineStrings are stored start -> finish, are NOT resorted, and carry
+"geom_type": "line" (polygons: "polygon") so the loader can skip resort_corners for them.
 By default, polygons and lines are saved as in create_coco_osm.py. If --line_buffer_px
 is provided, lines are buffered into closed polygons in pixel space. Buffered annotations
 also include source_geom_type to record whether the original geometry was a line or polygon.
@@ -33,6 +37,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 from shapely.geometry import LineString, Polygon
+from shapely.ops import clip_by_rect
 
 REPO = Path(__file__).resolve().parents[1]
 R2S = REPO.parent / "Raster2Seq"
@@ -138,6 +143,14 @@ def make_to_px(data, png_width):
     return to_px
 
 
+def clip_to_image(shape, width, height):
+    """The pieces of a shapely shape inside the image (0..width-1, 0..height-1), as a list."""
+    if not shape.is_valid:
+        shape = shape.buffer(0)   # repair self-intersecting outlines before clipping
+    clipped = clip_by_rect(shape, 0, 0, width - 1, height - 1)
+    return [g for g in getattr(clipped, "geoms", [clipped]) if not g.is_empty]
+
+
 def buffer_line_geometries(geoms, radius_px):
     """Convert each line into its own polygon with the requested pixel-radius buffer."""
     if radius_px <= 0:
@@ -161,30 +174,35 @@ def buffer_line_geometries(geoms, radius_px):
     return buffered_geoms
 
 
-def build_annotations(geoms, width, height, min_area=20.0, simplify_tol=1.0, img_id=0, start_id=0):
+def build_annotations(geoms, width, height, min_area=20.0, simplify_tol=2.0, min_line_length=4.0,
+                      img_id=0, start_id=0):
     """COCO annotations for one image; optional 4th tuple item records the source geometry type."""
     anns = []
     for item in geoms:
         pts, label, geom_type = item[:3]
         is_poly = geom_type == "polygon"
-        # uses shapely method simpify
-        shape = (Polygon if is_poly else LineString)(pts).simplify(simplify_tol)
-        if is_poly:
-            if shape.geom_type != "Polygon" or shape.area < min_area:
-                continue
-            pts = resort_corners(np.asarray(shape.exterior.coords[:-1])).reshape(-1, 2)  # drop closing point
-        else:
-            pts = np.asarray(shape.coords)
-        annotation = {
-            "id": start_id + len(anns), "image_id": img_id, "iscrowd": 0,
-            "category_id": CATEGORIES[label], "geom_type": geom_type,
-            "segmentation": [pts.reshape(-1).tolist()], "area": shape.area,
-            "bbox": create_coco_bounding_box(pts[:, 0], pts[:, 1], width, height, bound_pad=2),
-        }
-        # Only buffered runs add a fourth item recording the original geometry type.
-        if len(item) > 3:
-            annotation["source_geom_type"] = item[3]
-        anns.append(annotation)
+        for piece in clip_to_image((Polygon if is_poly else LineString)(pts), width, height):
+            if piece.geom_type != ("Polygon" if is_poly else "LineString"):
+                continue   # e.g. a point or edge where a shape only touches the image border
+            shape = piece.simplify(simplify_tol)
+            if is_poly:
+                if shape.geom_type != "Polygon" or shape.area < min_area:
+                    continue
+                out = resort_corners(np.asarray(shape.exterior.coords[:-1])).reshape(-1, 2)  # drop closing point
+            else:
+                if shape.length < min_line_length:
+                    continue
+                out = np.asarray(shape.coords)
+            annotation = {
+                "id": start_id + len(anns), "image_id": img_id, "iscrowd": 0,
+                "category_id": CATEGORIES[label], "geom_type": geom_type,
+                "segmentation": [out.reshape(-1).tolist()], "area": shape.area,
+                "bbox": create_coco_bounding_box(out[:, 0], out[:, 1], width, height, bound_pad=2),
+            }
+            # Only buffered runs add a fourth item recording the original geometry type.
+            if len(item) > 3:
+                annotation["source_geom_type"] = item[3]
+            anns.append(annotation)
     return anns
 
 
@@ -195,7 +213,9 @@ def config():
     a.add_argument("--test_borough", default="queens", type=str, help="crops named <test_borough>_* form the test split")
     a.add_argument("--val_frac", default=0.1, type=float, help="val size as a fraction of all crops, test included (taken from non-test crops)")
     a.add_argument("--min_area", default=20.0, type=float, help="drop polygons smaller than this (px^2)")
-    a.add_argument("--simplify_tol", default=1.0, type=float, help="shape simplification tolerance (px); 0 = off")
+    a.add_argument("--simplify_tol", default=2.0, type=float,
+                   help="shape simplification tolerance in PNG px (2 px ~ 1 px after Raster2Seq's 512 px resize); 0 = off")
+    a.add_argument("--min_line_length", default=4.0, type=float, help="drop line pieces shorter than this (px)")
     a.add_argument("--seed", default=0, type=int)
     a.add_argument("--line_buffer_px", default=None, type=float,
                    help="buffer radius in PNG pixels for line features; omit to keep lines unbuffered")
@@ -247,7 +267,8 @@ def main(args):
             # Keep the original line coordinates unless a buffer radius was supplied.
             if args.line_buffer_px is not None:
                 geoms = buffer_line_geometries(geoms, args.line_buffer_px)
-            anns = build_annotations(geoms, w, h, args.min_area, args.simplify_tol, img_id, ann_id)
+            anns = build_annotations(geoms, w, h, args.min_area, args.simplify_tol, args.min_line_length, 
+                                        img_id, ann_id)
             coco["annotations"] += anns
             ann_id += len(anns)
         with open(out / "annotations" / f"{split}.json", "w") as fh:
