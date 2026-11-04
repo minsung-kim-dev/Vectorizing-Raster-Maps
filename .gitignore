@@ -20,3 +20,5 @@ crops/
 
 results/
 __pycache__/
+crops_*/
+data/coco_osm_*buffered*/
