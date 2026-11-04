@@ -23,6 +23,8 @@ What it reports (all in --out):
     summary.json    overall and macro-averaged scores, with 95% bootstrap intervals over images
 
 Matching: one-to-one within a label, IoU >= --iou, best pairs first (as in notebooks/simple_baselines.ipynb).
+Only the part of each shape inside the image is scored: the crops' GeoJSON reaches past the PNG's edge,
+so shapes are cut to the image rectangle first, and shapes with nothing inside it are dropped.
 Lines are scored as polygons widened --line_buffer_px on each side, like the training data from
 create_coco_osm.py --line_buffer_px (default 2). --line_buffer_px 0 scores centrelines widened to
 --line_width bands instead.
@@ -40,7 +42,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-from shapely.geometry import LineString, Polygon
+from shapely.geometry import LineString, Polygon, box
 
 REPO = Path(__file__).resolve().parents[1]
 MODEL_INPUT = 512  # Raster2Seq's --image_size; geometry bins are measured at this scale
@@ -102,16 +104,22 @@ def buffer_lines(shapes, radius, simplify_tol=1.0, min_area=20.0, return_index=F
     return (out, index) if return_index else out
 
 
-def geometry(s, line_width):
-    if s["kind"] == "line":
-        return LineString(s["points"]).buffer(line_width / 2)
-    return Polygon(s["points"]).buffer(0)
+def geometry(s, line_width, frame=None):
+    """Area the shape covers, cut to `frame` (the image rectangle) when given."""
+    g = LineString(s["points"]).buffer(line_width / 2) if s["kind"] == "line" else Polygon(s["points"]).buffer(0)
+    return g.intersection(frame) if frame is not None else g
 
 
-def match(preds, gts, line_width=6.0, thr=0.5):
-    """Matched (pred index, true index) pairs: one-to-one within a label, IoU >= thr, best pairs first."""
-    pg = [geometry(s, line_width) for s in preds]
-    gg = [geometry(s, line_width) for s in gts]
+def visible(shapes, line_width, frame, min_area=1.0):
+    """Indices of shapes that cover at least min_area px^2 inside the image."""
+    return [k for k, s in enumerate(shapes) if geometry(s, line_width, frame).area >= min_area]
+
+
+def match(preds, gts, line_width=6.0, thr=0.5, frame=None):
+    """Matched (pred index, true index) pairs: one-to-one within a label, IoU >= thr, best pairs first.
+    With `frame`, only the part of each shape inside the image counts."""
+    pg = [geometry(s, line_width, frame) for s in preds]
+    gg = [geometry(s, line_width, frame) for s in gts]
     gb = np.array([g.bounds if not g.is_empty else (np.inf, np.inf, -np.inf, -np.inf) for g in gg]).reshape(-1, 4)
     pairs = []
     for i, (p, a) in enumerate(zip(preds, pg)):
@@ -287,7 +295,14 @@ def score(data, split, predictions, out, method="prediction", line_buffer_px=2.0
             bins = [bins[k] for k in index]
             pred = buffer_lines(pred, line_buffer_px)
 
-        pairs = match(pred, gt, line_width, iou)
+        # The crops' GeoJSON reaches a few px past the image edge, so many true shapes stick out of the
+        # PNG. Score only what is inside the image, and drop shapes with nothing visible inside it.
+        frame = box(0, 0, w, h)
+        keep = visible(gt, line_width, frame)
+        gt, bins = [gt[k] for k in keep], [bins[k] for k in keep]
+        pred = [pred[k] for k in visible(pred, line_width, frame)]
+
+        pairs = match(pred, gt, line_width, iou, frame)
         matched_gt = {j for _, j in pairs}
         np_ = collections.Counter(s["label"] for s in pred)
         ng = collections.Counter(s["label"] for s in gt)
