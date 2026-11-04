@@ -98,6 +98,7 @@ Labels come from the fixed vocabulary `VOCAB` in `create_coco_osm.py` (e.g. `str
 ```shell
 python evaluation/score.py --pred results/<method>/test/predictions.json --data data/coco_osm --split test
 python evaluation/score.py --pred ground_truth      # sanity check: scores the truth against itself, should be 1.0
+python evaluation/test_score.py                      # 6 checks with known answers (empty, half, shifted, relabelled, duplicated)
 ```
 
 Predictions format, coordinates in pixels of the PNG as stored in the dataset (Raster2Seq output must be scaled back from its 512 px padded input first):
