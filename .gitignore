@@ -7,6 +7,8 @@ data/train10000
 data/train10000_png
 data/README.md
 data/coco_osm
+data/crops*
+data/coco_osm_125m/
 *.tar.gz
 *.tsv.gz
 .DS_Store
@@ -14,7 +16,11 @@ data/coco_osm
 osm_data/
 *.zip
 crops/
+crops*/
 *.tar.xz
 *.mbtiles
 *.osm.pbf
-
+.claude
+.claude/
+*.pyc
+__pycache__
