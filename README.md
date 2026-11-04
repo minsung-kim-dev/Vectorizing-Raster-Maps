@@ -60,16 +60,48 @@ Labels come from the fixed vocabulary `VOCAB` in `create_coco_osm.py` (e.g. `str
 
 `_scratch/eda.ipynb` walks through the conversion for a single crop and plots the result against the PNG.
 
+## Evaluation
+
+`evaluation/score.py` is the shared scorer: every method (colour baseline, Claude, Raster2Seq) writes its shapes to a predictions JSON, and this script scores them the same way against a COCO split. It needs only the COCO dataset, not Raster2Seq.
+
+```shell
+python evaluation/score.py --pred results/<method>/test/predictions.json --data data/coco_osm --split test
+python evaluation/score.py --pred ground_truth      # sanity check: scores the truth against itself, should be 1.0
+```
+
+Predictions format, coordinates in pixels of the PNG as stored in the dataset (Raster2Seq output must be scaled back from its 512 px padded input first):
+
+```json
+{
+  "method": "raster2seq stage 1",
+  "images": {
+    "queens_01156.png": [
+      {"label": "building", "kind": "polygon", "points": [[x, y], [x, y], ...]},
+      {"label": "street",   "kind": "line",    "points": [[x, y], [x, y], ...]}
+    ]
+  }
+}
+```
+
+`label` is a category name from `VOCAB` in `create_coco_osm.py`; `kind` is `polygon` (closed, first point not repeated) or `line` (open). Images missing from the file are scored as empty.
+
+Outputs, next to the predictions file:
+- `per_label.csv`: true / predicted / matched shapes, precision, recall, F1 and pixel IoU per label
+- `per_bin.csv`: recall split by the true shapes' geometry (size at the 512 px model input, vertex count, convex or concave, corner angles, overlapping another shape, touching the crop edge, line or polygon)
+- `per_image.csv`, and `summary.json` with overall and macro-averaged scores plus a 95% bootstrap interval over images
+
+Shapes match when they share a label and overlap with IoU ≥ 0.5, one-to-one, best pairs first. Lines are scored as buffered polygons, like the training data from Minsung's `--line_buffer_px` (default 2 px each side; pass the value the dataset was built with, or `0` to score centrelines).
+
 ## Baselines
 
 ### Colour threshold (no learning)
 
-`baselines/color_threshold.py` finds shapes by their known map colours (OpenCV contours for areas, skeletons for roads/rails/paths) and scores them against the COCO annotations, per label. It only needs the COCO dataset, not Raster2Seq, and runs on CPU (about 10 s per crop).
+`baselines/color_threshold.py` finds shapes by their known map colours (OpenCV contours for areas, skeletons for roads/rails/paths), writes them to `predictions.json` and scores them with `evaluation/score.py`. It runs on CPU (about 10 s per crop).
 
 ```shell
 pip install opencv-python-headless scikit-image shapely numpy pillow matplotlib
-python baselines/color_threshold.py                                     # mini test set: 12 Queens crops
-python baselines/color_threshold.py --data data/coco_osm --split test   # full Queens test set
+python baselines/color_threshold.py                                      # mini test set: 12 Queens crops
+python baselines/color_threshold.py --data data/coco_osm_buffered --line_buffer_px 2   # full buffered test set
 ```
 
-Writes `results/color_threshold/<split>/per_label.csv` (true / predicted / matched shapes, precision, recall, F1, pixel IoU), `per_image.csv`, and side-by-side plots. Shapes match when they share a label and overlap with IoU ≥ 0.5, the same rule as `notebooks/simple_baselines.ipynb`. Lines are scored as buffered polygons, like the training data from Minsung's `--line_buffer_px` (default 2 px each side; pass the same value you built the dataset with, or `0` to score centrelines). For lines, pixel IoU is the fairer number: the baseline cuts roads at every junction while OSM splits them wherever a street's tags change, so pieces rarely line up one-to-one.
+Results go to `results/color_threshold/<split>/`. Use `--plots N` for side-by-side plots of the first N crops.

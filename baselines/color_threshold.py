@@ -8,16 +8,10 @@ The crops are drawn with a fixed palette (utils/render_carto.py), so many labels
   3. Lines: the road / rail / path mask is thinned to 1-pixel centrelines (skeletonize), cut at
      junctions, and each piece is traced end to end and simplified.
 
-Scored against the COCO annotations made by data_preprocess/create_coco_osm.py, at the PNG's own
-resolution (no Raster2Seq install needed), two ways:
-  - Shapes: one-to-one matching within each label, IoU >= --iou (greedy, best pairs first). Same rule as notebooks/simple_baselines.ipynb, so a
-    Raster2Seq prediction can be scored the same way later.
-  - Pixels: per-label IoU of the drawn masks (predicted shapes vs. true shapes, both rasterized).
-
-Lines are scored as buffered polygons, the way Raster2Seq is trained on them (Minsung's
---line_buffer_px in create_coco_osm.py): predicted lines, and any true lines that are still lines,
-are widened by --line_buffer_px px on each side (default 2). Use a dataset built with the same
---line_buffer_px. --line_buffer_px 0 scores lines as centrelines instead, widened to --line_width bands.
+Predictions are written to predictions.json and scored by evaluation/score.py (the shared scorer
+every method uses): per-label precision / recall / F1 / pixel IoU, recall per geometry bin, macro
+averages and bootstrap intervals. Lines are scored as polygons widened --line_buffer_px px on each
+side (default 2, like create_coco_osm.py --line_buffer_px); 0 scores centrelines instead.
 
 Usage:
     pip install opencv-python-headless scikit-image shapely numpy pillow matplotlib
@@ -26,28 +20,25 @@ Usage:
     python baselines/color_threshold.py --data data/coco_osm_buffered --line_buffer_px 2
 
 Writes to --out (default results/color_threshold/<split>/):
-    per_label.csv   label, true / predicted / matched shapes, precision, recall, F1, pixel IoU
-    per_image.csv   the same totals per crop
-    plots/*.png     map | ground truth | prediction, for the first --plots crops
+    predictions.json  the baseline's shapes, in the shared predictions format
+    per_label.csv, per_bin.csv, per_image.csv, summary.json   from evaluation/score.py
+    plots/*.png       map | ground truth | prediction, for the first --plots crops
 CPU only; a GPU is not used.
 """
 
 import argparse
-import collections
-import csv
-import json
+import sys
 from pathlib import Path
 
 import cv2
 import numpy as np
 from PIL import Image
-from shapely.geometry import LineString, Polygon
 from skimage.morphology import skeletonize
 
 REPO = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO))
+from evaluation.score import load_coco, save_predictions, score  # noqa: E402
 
-# Labels stored as open lines in create_coco_osm.py's VOCAB (everything else is a closed polygon)
-LINE_LABELS = {"highway", "street", "path", "railway", "pier", "waterway", "runway", "unknown_line"}
 
 # label -> fill colours used by utils/render_carto.py
 POLY_COLORS = {
@@ -141,122 +132,6 @@ def predict(arr, tol=12, pool_max=3000.0, min_area=20.0):
 
 
 # ---------------------------------------------------------------------------------------------
-# Ground truth and scoring
-# ---------------------------------------------------------------------------------------------
-
-def load_coco(data, split):
-    with open(Path(data) / "annotations" / f"{split}.json") as fh:
-        coco = json.load(fh)
-    names = {c["id"]: c["name"] for c in coco["categories"]}
-    by_image = collections.defaultdict(list)
-    for a in coco["annotations"]:
-        pts = np.asarray(a["segmentation"][0], float).reshape(-1, 2).tolist()
-        kind = "line" if a.get("geom_type") == "line" else "polygon"  # buffered lines are polygons
-        by_image[a["image_id"]].append({"label": names[a["category_id"]], "kind": kind, "points": pts,
-                                        "buffered": a.get("source_geom_type") == "line"})
-    return coco["images"], by_image
-
-
-def buffer_lines(shapes, radius):
-    """Turn every line into a polygon by widening it `radius` px on each side (outer ring only)."""
-    out = []
-    for s in shapes:
-        if s["kind"] != "line":
-            out.append(s)
-            continue
-        g = LineString(s["points"]).buffer(radius).simplify(0.5)
-        if g.geom_type == "MultiPolygon":
-            g = max(g.geoms, key=lambda p: p.area)
-        if g.geom_type == "Polygon" and not g.is_empty:
-            out.append({**s, "kind": "polygon", "points": [list(p) for p in g.exterior.coords[:-1]]})
-    return out
-
-
-def geometry(s, line_width):
-    if s["kind"] == "line":
-        return LineString(s["points"]).buffer(line_width / 2)
-    return Polygon(s["points"]).buffer(0)
-
-
-def match(preds, gts, line_width=6.0, thr=0.5):
-    """Matched shapes per label: one-to-one within a label, IoU >= thr, best pairs first."""
-    pg = [geometry(s, line_width) for s in preds]
-    gg = [geometry(s, line_width) for s in gts]
-    gb = np.array([g.bounds for g in gg]).reshape(-1, 4)
-    pairs = []
-    for i, (p, a) in enumerate(zip(preds, pg)):
-        if a.is_empty:
-            continue
-        x0, y0, x1, y1 = a.bounds  # only compare shapes whose boxes overlap
-        near = np.flatnonzero((gb[:, 0] <= x1) & (gb[:, 2] >= x0) & (gb[:, 1] <= y1) & (gb[:, 3] >= y0))
-        for j in near:
-            if gts[j]["label"] != p["label"]:
-                continue
-            union = a.union(gg[j]).area
-            if union > 0:
-                pairs.append((a.intersection(gg[j]).area / union, i, int(j)))
-    used_p, used_g, hits = set(), set(), collections.Counter()
-    for iou, i, j in sorted(pairs, reverse=True):
-        if iou < thr:
-            break
-        if i not in used_p and j not in used_g:
-            used_p.add(i)
-            used_g.add(j)
-            hits[preds[i]["label"]] += 1
-    return hits
-
-
-def rasterize(shapes, shape_hw, line_width):
-    """label -> boolean mask of where its shapes are drawn."""
-    masks = {}
-    for s in shapes:
-        m = masks.setdefault(s["label"], np.zeros(shape_hw, np.uint8))
-        pts = np.round(np.asarray(s["points"])).astype(np.int32).reshape(-1, 1, 2)
-        if s["kind"] == "line":
-            cv2.polylines(m, [pts], False, 1, thickness=max(1, int(round(line_width))))
-        else:
-            cv2.fillPoly(m, [pts], 1)
-    return {k: v.astype(bool) for k, v in masks.items()}
-
-
-# ---------------------------------------------------------------------------------------------
-# Plots
-# ---------------------------------------------------------------------------------------------
-
-def plot(img, gt, pred, path):
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    from matplotlib.patches import Polygon as MplPolygon
-
-    labels = sorted({s["label"] for s in gt + pred})
-    colors = {l: plt.cm.tab20(i % 20) for i, l in enumerate(labels)}
-    fig, axes = plt.subplots(1, 3, figsize=(18, 6.5))
-    for ax, (title, shapes) in zip(axes, [("rendered map", None), (f"ground truth ({len(gt)})", gt),
-                                          (f"colour threshold ({len(pred)})", pred)]):
-        ax.imshow(img, alpha=1 if shapes is None else 0.35)
-        for s in shapes or []:
-            is_poly = s["kind"] != "line"
-            ax.add_patch(MplPolygon(s["points"], closed=is_poly, fill=is_poly, facecolor=colors[s["label"]],
-                                    edgecolor=colors[s["label"]], alpha=0.6, linewidth=0.6 if is_poly else 1.2))
-        ax.set(title=title, xlim=(0, img.width), ylim=(img.height, 0), aspect="equal")
-        ax.axis("off")
-    fig.legend([plt.Rectangle((0, 0), 1, 1, color=colors[l]) for l in labels], labels,
-               loc="lower center", ncol=min(len(labels), 8), frameon=False)
-    fig.tight_layout(rect=(0, 0.06, 1, 1))
-    fig.savefig(path, dpi=100)
-    plt.close(fig)
-
-
-# ---------------------------------------------------------------------------------------------
-
-def ratio(a, b):
-    return a / b if b else 0.0
-
-
-def f1(p, r):
-    return 2 * p * r / (p + r) if p + r else 0.0
-
 
 def config():
     a = argparse.ArgumentParser(description=__doc__.split("\n")[0])
@@ -279,70 +154,18 @@ def config():
 
 def main(args):
     out = Path(args.out or REPO / "results" / "color_threshold" / args.split)
-    (out / "plots").mkdir(parents=True, exist_ok=True)
-    images, gts = load_coco(args.data, args.split)
+    out.mkdir(parents=True, exist_ok=True)
+    images, _ = load_coco(args.data, args.split)
     if args.limit:
         images = images[:args.limit]
-    if any(s["buffered"] for g in gts.values() for s in g):
-        print("dataset lines are buffered (source_geom_type = line): make sure --line_buffer_px matches the "
-              f"value used in create_coco_osm.py (using {args.line_buffer_px})")
-        if not args.line_buffer_px:
-            print("warning: --line_buffer_px 0 compares predicted centrelines with buffered true lines")
-
-    n_pred, n_gt, hits = collections.Counter(), collections.Counter(), collections.Counter()
-    inter, union = collections.Counter(), collections.Counter()
-    rows = []
+    preds = {}
     for k, info in enumerate(images):
-        img = Image.open(Path(args.data) / args.split / info["file_name"]).convert("RGB")
-        arr = np.array(img)
-        gt, pred = gts[info["id"]], predict(arr, args.tol, args.pool_max, args.min_area)
-        if args.line_buffer_px:
-            gt, pred = buffer_lines(gt, args.line_buffer_px), buffer_lines(pred, args.line_buffer_px)
-
-        h = match(pred, gt, args.line_width, args.iou)
-        np_, ng = collections.Counter(s["label"] for s in pred), collections.Counter(s["label"] for s in gt)
-        n_pred += np_; n_gt += ng; hits += h
-
-        gm, pm = rasterize(gt, arr.shape[:2], args.line_width), rasterize(pred, arr.shape[:2], args.line_width)
-        for label in set(gm) | set(pm):
-            g = gm.get(label, np.zeros(arr.shape[:2], bool))
-            p = pm.get(label, np.zeros(arr.shape[:2], bool))
-            inter[label] += int((g & p).sum())
-            union[label] += int((g | p).sum())
-
-        P, G, H = sum(np_.values()), sum(ng.values()), sum(h.values())
-        rows.append({"image": info["file_name"], "true": G, "predicted": P, "matched": H,
-                     "precision": round(ratio(H, P), 3), "recall": round(ratio(H, G), 3)})
-        print(f"[{k + 1}/{len(images)}] {info['file_name']}: {G} true, {P} predicted, {H} matched")
-        if k < args.plots:
-            plot(img, gt, pred, out / "plots" / info["file_name"])
-
-    labels = sorted(set(n_pred) | set(n_gt), key=lambda l: (-n_gt[l], l))
-    table = []
-    for label in labels:
-        p, r = ratio(hits[label], n_pred[label]), ratio(hits[label], n_gt[label])
-        table.append({"label": label, "kind": "line" if label in LINE_LABELS else "polygon",
-                      "true": n_gt[label], "predicted": n_pred[label], "matched": hits[label],
-                      "precision": round(p, 3), "recall": round(r, 3), "f1": round(f1(p, r), 3),
-                      "pixel_iou": round(ratio(inter[label], union[label]), 3)})
-    P, G, H = sum(n_pred.values()), sum(n_gt.values()), sum(hits.values())
-    p, r = ratio(H, P), ratio(H, G)
-    table.append({"label": "ALL", "kind": "", "true": G, "predicted": P, "matched": H,
-                  "precision": round(p, 3), "recall": round(r, 3), "f1": round(f1(p, r), 3),
-                  "pixel_iou": round(ratio(sum(inter.values()), sum(union.values())), 3)})
-
-    for name, data in [("per_label.csv", table), ("per_image.csv", rows)]:
-        with open(out / name, "w", newline="") as fh:
-            w = csv.DictWriter(fh, fieldnames=list(data[0]))
-            w.writeheader()
-            w.writerows(data)
-
-    print(f"\n{'label':<13} {'kind':<8} {'true':>5} {'pred':>5} {'match':>6} {'prec':>6} {'recall':>7} "
-          f"{'f1':>6} {'pix IoU':>8}")
-    for t in table:
-        print(f"{t['label']:<13} {t['kind']:<8} {t['true']:>5} {t['predicted']:>5} {t['matched']:>6} "
-              f"{t['precision']:>6.2f} {t['recall']:>7.2f} {t['f1']:>6.2f} {t['pixel_iou']:>8.2f}")
-    print(f"\nwrote {out}/per_label.csv, per_image.csv and {min(args.plots, len(images))} plots")
+        arr = np.array(Image.open(Path(args.data) / args.split / info["file_name"]).convert("RGB"))
+        preds[info["file_name"]] = predict(arr, args.tol, args.pool_max, args.min_area)
+        print(f"predicted [{k + 1}/{len(images)}] {info['file_name']}: {len(preds[info['file_name']])} shapes")
+    save_predictions(out / "predictions.json", "colour threshold", preds)
+    score(args.data, args.split, preds, out, "colour threshold", args.line_buffer_px, args.line_width,
+          args.iou, args.plots, args.limit)
 
 
 if __name__ == "__main__":
