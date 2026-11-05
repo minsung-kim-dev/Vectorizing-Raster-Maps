@@ -211,7 +211,7 @@ def config():
     a.add_argument("--data_root", required=True, type=str, help="folder with <name>.geojson.gz and <name>.png")
     a.add_argument("--output", required=True, type=str, help="output dataset root")
     a.add_argument("--test_borough", default="queens", type=str, help="crops named <test_borough>_* form the test split")
-    a.add_argument("--val_frac", default=0.1, type=float, help="fraction of non-test crops used for val")
+    a.add_argument("--val_frac", default=0.1, type=float, help="val size as a fraction of all crops, test included (taken from non-test crops)")
     a.add_argument("--min_area", default=20.0, type=float, help="drop polygons smaller than this (px^2)")
     a.add_argument("--simplify_tol", default=2.0, type=float,
                    help="shape simplification tolerance in PNG px (2 px ~ 1 px after Raster2Seq's 512 px resize); 0 = off")
@@ -246,7 +246,7 @@ def main(args):
         is_test = lambda f: f.name.startswith(f"{args.test_borough}_")
         rest = [f for f in pngs if not is_test(f)]
         random.Random(args.seed).shuffle(rest)
-        n_val = int(args.val_frac * len(rest))
+        n_val = int(args.val_frac * len(pngs))
         splits = {"train": rest[n_val:], "val": rest[:n_val], "test": [f for f in pngs if is_test(f)]}
 
     # write images + COCO json per split (category ids come from the fixed VOCAB)
