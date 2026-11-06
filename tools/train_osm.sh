@@ -12,11 +12,11 @@ set -euo pipefail
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 R2S=${R2S:-$REPO/../Raster2Seq}
 CROPS=${CROPS:-$REPO/crops}
-DATA=${DATA:-$REPO/data/coco_osm}
+DATA=${DATA:-$REPO/data/coco_osm_mini}
 OUTPUT_DIR=${OUTPUT_DIR:-$REPO/save_models}
 
 IMAGE_SIZE=512    # crops are ~1100 px; 256 loses small shapes
-SEQ_LEN=2048      # fits ~90% of crops completely (1024 fits ~50%)
+SEQ_LEN=512       # fits ~90% of crops completely (1024 fits ~50%)
 NUM_BINS=32       # matches Raster2Seq's CubiCasa checkpoint used as the starting point
 ROW_TOL=0.08      # shape order: rows 8% of the image height, top to bottom, left to right (needs the fork)
 CLS_COEFF=5
@@ -48,71 +48,71 @@ print(f"val tokens per image: median {np.median(n):.0f}, max {n.max()} | "
 EOF
 
 # ---- 3. Plot a few val images through Raster2Seq's loader (data_plots/osm/val) ----
-DATA="$DATA" bash "$REPO/tools/plot_osm.sh" val
+#DATA="$DATA" bash "$REPO/tools/plot_osm.sh" val
 
 # ---- 4. Stage 1: shapes only (GPU) ----
-# cd "$R2S"
-# mkdir -p wandb_keys && touch "wandb_keys/$(whoami)_wandb.key"  # main_ddp.py otherwise prompts for a wandb key
-# PRETRAIN=$(python -c "from raster2seq_hub import download_checkpoint; print(download_checkpoint('cubicasa5k'))")
-# WANDB_MODE=disabled torchrun --nproc_per_node=${NUM_GPUS} --master_port=14159 main_ddp.py \
-#     --dataset_name=waffle \
-#     --dataset_root="$DATA" \
-#     --semantic_classes=-1 \
-#     --job_name=osm_stage1 \
-#     --output_dir "$OUTPUT_DIR" \
-#     --batch_size ${BATCH_SIZE} \
-#     --input_channels=3 \
-#     --image_size ${IMAGE_SIZE} \
-#     --poly2seq \
-#     --seq_len ${SEQ_LEN} \
-#     --row_tolerance ${ROW_TOL} \
-#     --num_bins ${NUM_BINS} \
-#     --ckpt_every_epoch=50 \
-#     --eval_every_epoch=50 \
-#     --label_smoothing 0.1 \
-#     --epochs ${EPOCHS} \
-#     --lr_drop '' \
-#     --cls_loss_coef ${CLS_COEFF} \
-#     --coords_loss_coef ${COO_COEFF} \
-#     --resume "$OUTPUT_DIR/osm_stage1/checkpoint.pth" \
-#     --ema4eval \
-#     --disable_poly_refine \
-#     --dec_attn_concat_src \
-#     --converter_version ${CONVERTER} \
-#     --use_anchor \
-#     --start_from_checkpoint "$PRETRAIN"
+cd "$R2S"
+mkdir -p wandb_keys && touch "wandb_keys/$(whoami)_wandb.key"  # main_ddp.py otherwise prompts for a wandb key
+PRETRAIN=$(python -c "from raster2seq_hub import download_checkpoint; print(download_checkpoint('cubicasa5k'))")
+torchrun --nproc_per_node=${NUM_GPUS} --master_port=14159 main_ddp.py \
+    --dataset_name=waffle \
+    --dataset_root="$DATA" \
+    --semantic_classes=-1 \
+    --job_name=osm_stage1 \
+    --output_dir "$OUTPUT_DIR" \
+    --batch_size ${BATCH_SIZE} \
+    --input_channels=3 \
+    --image_size ${IMAGE_SIZE} \
+    --poly2seq \
+    --seq_len ${SEQ_LEN} \
+    --row_tolerance ${ROW_TOL} \
+    --num_bins ${NUM_BINS} \
+    --ckpt_every_epoch=50 \
+    --eval_every_epoch=50 \
+    --label_smoothing 0.1 \
+    --epochs ${EPOCHS} \
+    --lr_drop '' \
+    --cls_loss_coef ${CLS_COEFF} \
+    --coords_loss_coef ${COO_COEFF} \
+    --resume "$OUTPUT_DIR/osm_stage1/checkpoint.pth" \
+    --ema4eval \
+    --disable_poly_refine \
+    --dec_attn_concat_src \
+    --converter_version ${CONVERTER} \
+    --use_anchor \
+    --start_from_checkpoint "$PRETRAIN"
 
 # ---- 5. Stage 2: shapes + labels, starting from stage 1 (GPU) ----
-# cd "$R2S"
-# WANDB_MODE=disabled torchrun --nproc_per_node=${NUM_GPUS} --master_port=14159 main_ddp.py \
-#     --dataset_name=waffle \
-#     --dataset_root="$DATA" \
-#     --semantic_classes=${SEM_CLASSES} \
-#     --job_name=osm_stage2 \
-#     --output_dir "$OUTPUT_DIR" \
-#     --batch_size ${BATCH_SIZE} \
-#     --input_channels=3 \
-#     --image_size ${IMAGE_SIZE} \
-#     --poly2seq \
-#     --seq_len ${SEQ_LEN} \
-#     --row_tolerance ${ROW_TOL} \
-#     --num_bins ${NUM_BINS} \
-#     --ckpt_every_epoch=50 \
-#     --eval_every_epoch=50 \
-#     --label_smoothing 0.1 \
-#     --epochs ${EPOCHS} \
-#     --lr_drop '' \
-#     --cls_loss_coef ${CLS_COEFF} \
-#     --coords_loss_coef ${COO_COEFF} \
-#     --room_cls_loss_coef ${SEM_COEFF} \
-#     --resume "$OUTPUT_DIR/osm_stage2/checkpoint.pth" \
-#     --ema4eval \
-#     --disable_poly_refine \
-#     --dec_attn_concat_src \
-#     --per_token_sem_loss \
-#     --jointly_train \
-#     --converter_version ${CONVERTER} \
-#     --use_anchor \
-#     --start_from_checkpoint "$OUTPUT_DIR/osm_stage1/checkpoint.pth"
+cd "$R2S"
+torchrun --nproc_per_node=${NUM_GPUS} --master_port=14159 main_ddp.py \
+    --dataset_name=waffle \
+    --dataset_root="$DATA" \
+    --semantic_classes=${SEM_CLASSES} \
+    --job_name=osm_stage2 \
+    --output_dir "$OUTPUT_DIR" \
+    --batch_size ${BATCH_SIZE} \
+    --input_channels=3 \
+    --image_size ${IMAGE_SIZE} \
+    --poly2seq \
+    --seq_len ${SEQ_LEN} \
+    --row_tolerance ${ROW_TOL} \
+    --num_bins ${NUM_BINS} \
+    --ckpt_every_epoch=50 \
+    --eval_every_epoch=50 \
+    --label_smoothing 0.1 \
+    --epochs ${EPOCHS} \
+    --lr_drop '' \
+    --cls_loss_coef ${CLS_COEFF} \
+    --coords_loss_coef ${COO_COEFF} \
+    --room_cls_loss_coef ${SEM_COEFF} \
+    --resume "$OUTPUT_DIR/osm_stage2/checkpoint.pth" \
+    --ema4eval \
+    --disable_poly_refine \
+    --dec_attn_concat_src \
+    --per_token_sem_loss \
+    --jointly_train \
+    --converter_version ${CONVERTER} \
+    --use_anchor \
+    --start_from_checkpoint "$OUTPUT_DIR/osm_stage1/checkpoint.pth"
 
 echo "Data checks done. Training (steps 4-5) is commented out: it needs an NVIDIA GPU (see the top of this file)."
