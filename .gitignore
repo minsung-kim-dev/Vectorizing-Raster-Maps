@@ -24,3 +24,6 @@ crops*/
 .claude/
 *.pyc
 __pycache__
+wandb/
+wandb_keys/
+save_models/
