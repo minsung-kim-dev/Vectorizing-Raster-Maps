@@ -58,6 +58,7 @@ for flag in --plot_gt --plot_gt_image --plot_density --compute_stats; do
                    --disable_image_transform \
                    --poly2seq \
                    --seq_len 1024 \
+                   --row_tolerance 0.08 \
                    --num_bins 64 \
                    --image_size 512 \
                    --image_scale 1 \
