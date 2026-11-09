@@ -11,7 +11,7 @@ data/crops*
 data/coco_osm_125m/
 data/coco_osm_val200/
 data/coco*
-
+data/nyc_nta_2020.geojson
 *.tar.gz
 *.tsv.gz
 .DS_Store
