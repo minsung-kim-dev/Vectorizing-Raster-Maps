@@ -9,6 +9,9 @@ data/README.md
 data/coco_osm
 data/crops*
 data/coco_osm_125m/
+data/coco_osm_val200/
+data/coco*
+data/nyc_nta_2020.geojson
 *.tar.gz
 *.tsv.gz
 .DS_Store
@@ -27,3 +30,5 @@ __pycache__
 wandb/
 wandb_keys/
 save_models/
+predictions/
+eval_outputs/
