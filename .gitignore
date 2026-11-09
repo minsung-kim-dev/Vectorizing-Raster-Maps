@@ -26,3 +26,4 @@ crops*/
 __pycache__
 results/
 data/coco_osm_*buffered*/
+data/coco_osm_125m*/

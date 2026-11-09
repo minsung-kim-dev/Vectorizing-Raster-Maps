@@ -19,10 +19,10 @@ averages and bootstrap intervals. Lines are scored as polygons widened --line_bu
 side (default 2, like create_coco_osm.py --line_buffer_px); 0 scores centrelines instead.
 
 Usage:
-    pip install opencv-python-headless scikit-image shapely numpy pillow matplotlib
+    pip install opencv-python-headless scikit-image scipy shapely numpy pillow matplotlib
     python baselines/color_threshold.py                                # mini test set (12 Queens crops)
-    python baselines/color_threshold.py --data data/coco_osm --split test --plots 10
-    python baselines/color_threshold.py --data data/coco_osm_buffered --line_buffer_px 2
+    python baselines/color_threshold.py --data data/coco_osm_125m_buffered --plots 10       # buffered lines (default 2 px)
+    python baselines/color_threshold.py --data data/coco_osm_125m --line_buffer_px 0        # unbuffered dataset
 
 Writes to --out (default results/color_threshold/<split>/):
     predictions.json  the baseline's shapes, in the shared predictions format

@@ -128,12 +128,15 @@ Shapes match when they share a label and overlap with IoU ≥ 0.5, one-to-one, b
 
 ### Colour threshold (no learning)
 
-`baselines/color_threshold.py` finds shapes by their known map colours (OpenCV contours for areas, skeletons for roads/rails/paths), writes them to `predictions.json` and scores them with `evaluation/score.py`. It runs on CPU (about 10 s per crop).
+`baselines/color_threshold.py` finds shapes by their known map colours (OpenCV contours for areas, skeletons for roads/rails/paths), writes them to `predictions.json` and scores them with `evaluation/score.py`. It runs on CPU, no GPU needed.
 
 ```shell
-pip install opencv-python-headless scikit-image shapely numpy pillow matplotlib
+pip install opencv-python-headless scikit-image scipy shapely numpy pillow matplotlib
 python baselines/color_threshold.py                                      # mini test set: 12 Queens crops
-python baselines/color_threshold.py --data data/coco_osm_buffered --line_buffer_px 2   # full buffered test set
+python data_preprocess/create_coco_osm.py --data_root crops_125m --output data/coco_osm_125m_buffered --line_buffer_px 2
+python baselines/color_threshold.py --data data/coco_osm_125m_buffered --line_buffer_px 2   # full Queens test set
 ```
 
-Results go to `results/color_threshold/<split>/`. Use `--plots N` for side-by-side plots of the first N crops.
+Results go to `results/color_threshold/<split>/` (or `--out`). Use `--plots N` for side-by-side plots of the first N crops.
+
+On the 1,500 Queens test crops of `crops_125m` (buffered lines, 2 px): overall F1 0.69 (precision 0.62, recall 0.76), buildings 0.93, pools 0.94, paths 0.41, streets 0.20.
