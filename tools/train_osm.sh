@@ -8,7 +8,7 @@ set -euo pipefail
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 R2S=${R2S:-$REPO/../Raster2Seq}
 CROPS=${CROPS:-$REPO/crops}
-DATA=${DATA:-$REPO/data/coco_osm}
+DATA=${DATA:-$REPO/data/coco_osm_val200}
 OUTPUT_DIR=${OUTPUT_DIR:-$REPO/save_models}
 
 IMAGE_SIZE=512    # crops are ~1100 px; 256 loses small shapes
@@ -68,9 +68,8 @@ PYTHONPATH=~/Vectorizing-Raster-Maps torchrun --nproc_per_node=${NUM_GPUS} --mas
     --seq_len ${SEQ_LEN} \
     --row_tolerance ${ROW_TOL} \
     --num_bins ${NUM_BINS} \
-    # --ckpt_every_epoch=50 \
-    --ckpt_every_epoch=5 \
-    --eval_every_epoch=5 \
+    --ckpt_every_epoch=2 \
+    --eval_every_epoch=10 \
     --label_smoothing 0.1 \
     --epochs ${EPOCHS} \
     --lr_drop '20' \
