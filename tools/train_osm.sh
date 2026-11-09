@@ -8,7 +8,7 @@ set -euo pipefail
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 R2S=${R2S:-$REPO/../Raster2Seq}
 CROPS=${CROPS:-$REPO/crops}
-DATA=${DATA:-$REPO/data/coco_osm_val200}
+DATA=${DATA:-$REPO/data/coco_osm_flushing}
 OUTPUT_DIR=${OUTPUT_DIR:-$REPO/save_models}
 
 IMAGE_SIZE=512    # crops are ~1100 px; 256 loses small shapes
@@ -22,8 +22,8 @@ CONVERTER=v3
 NUM_GPUS=1
 BATCH_SIZE=8      # lower if the GPU runs out of memory
 # EPOCHS=1000
-EPOCHS=30
-JOB="osm_stage-full"
+EPOCHS=100
+JOB="osm_stage_queens2000"
 
 # vocabulary size + 1 (Raster2Seq reserves the last class), read from create_coco_osm.py
 SEM_CLASSES=$(cd "$REPO" && python -c "from data_preprocess.create_coco_osm import CATEGORIES; print(len(CATEGORIES) + 1)")
@@ -68,7 +68,7 @@ PYTHONPATH=~/Vectorizing-Raster-Maps torchrun --nproc_per_node=${NUM_GPUS} --mas
     --seq_len ${SEQ_LEN} \
     --row_tolerance ${ROW_TOL} \
     --num_bins ${NUM_BINS} \
-    --ckpt_every_epoch=2 \
+    --ckpt_every_epoch=5 \
     --eval_every_epoch=10 \
     --label_smoothing 0.1 \
     --epochs ${EPOCHS} \
@@ -81,5 +81,4 @@ PYTHONPATH=~/Vectorizing-Raster-Maps torchrun --nproc_per_node=${NUM_GPUS} --mas
     --num_workers 4 \
     --dec_attn_concat_src \
     --converter_version ${CONVERTER} \
-    --use_anchor \
-    --start_from_checkpoint "$PRETRAIN"
+    --use_anchor 

@@ -10,6 +10,8 @@ data/coco_osm
 data/crops*
 data/coco_osm_125m/
 data/coco_osm_val200/
+data/coco*
+
 *.tar.gz
 *.tsv.gz
 .DS_Store
