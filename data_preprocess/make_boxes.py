@@ -2,36 +2,28 @@
 """
 make_boxes.py: generate random NYC bounding boxes of varying sizes for osm_crops.py.
 
-Box centers are sampled inside rough, hand-drawn outlines of the five boroughs,
-so boxes land mostly on land. The outlines are approximate: boxes near the
-shore will include some water, and a few may spill slightly into NJ.
+Box centers are sampled inside rough, hand-drawn outlines of the five boroughs, and boxes that are
+less than half land are skipped (land = all NYC 2020 NTAs, which follow the shoreline, minus OSM water
+such as lakes in parks).
 
 Usage:
   python make_boxes.py --n 3000 --min-m 150 --max-m 2500 --seed 42 --out boxes.csv
   python make_boxes.py --n 15000 --min-m 115 --max-m 115 --test-frac 0.1 --holdout queens --out boxes.csv
       (90% of boxes in the other boroughs, 10% in the held-out borough)
+  python make_boxes.py --n 2400 --min-m 125 --max-m 125 --boroughs queens --test-frac 0.0834 --test-nta flushing --out boxes.csv
+      (200 boxes named flushing_* inside the "flushing" NTAs, the rest in Queens away from them)
 """
 import argparse
 import math
+import os
 import random
+import urllib.request
 
+import geopandas as gpd
+from shapely.geometry import Point, Polygon, box
 
-
-class Polygon:
-    """Tiny polygon helper (no shapely needed)."""
-    def __init__(self, pts):
-        self.pts = pts
-        xs, ys = zip(*pts)
-        self.bounds = (min(xs), min(ys), max(xs), max(ys))
-        self.area = abs(sum(x0 * y1 - x1 * y0 for (x0, y0), (x1, y1)
-                            in zip(pts, pts[1:] + pts[:1]))) / 2
-
-    def contains(self, x, y):  # ray casting
-        inside, pts = False, self.pts
-        for (x0, y0), (x1, y1) in zip(pts, pts[1:] + pts[:1]):
-            if (y0 > y) != (y1 > y) and x < x0 + (y - y0) * (x1 - x0) / (y1 - y0):
-                inside = not inside
-        return inside
+NTA_URL = ("https://services5.arcgis.com/GfwWNkhOj9bNBqoJ/arcgis/rest/services/NYC_Neighborhood_Tabulation_Areas_2020/"
+           "FeatureServer/0/query?where=1=1&outFields=*&outSR=4326&f=pgeojson")
 
 BOROUGHS = {  # rough (lon, lat) outlines
     "manhattan": [(-74.016, 40.701), (-73.995, 40.707), (-73.973, 40.711), (-73.971, 40.744),
@@ -54,22 +46,34 @@ BOROUGHS = {  # rough (lon, lat) outlines
 }
 
 
-def sample_boxes(rng, polys, n, min_m, max_m, start=0):
-    """n boxes (name, min_lon, min_lat, max_lon, max_lat, w_m, h_m) inside polys, area-weighted."""
+def load_nta(path):
+    """NYC 2020 NTAs; downloaded to `path` if missing."""
+    if not os.path.exists(path):
+        urllib.request.urlretrieve(NTA_URL, path)
+    return gpd.read_file(path)
+
+
+def sample_boxes(rng, polys, n, min_m, max_m, land, start=0, avoid=None):
+    """n boxes (name, min_lon, min_lat, max_lon, max_lat, w_m, h_m) centred inside polys (area-weighted),
+    skipping boxes that are less than half `land` or touch the geometry `avoid`."""
     names, weights = list(polys), [polys[k].area for k in polys]
     rows = []
     while len(rows) < n:
         boro = rng.choices(names, weights)[0]
-        poly = polys[boro]
-        minx, miny, maxx, maxy = poly.bounds
+        minx, miny, maxx, maxy = polys[boro].bounds
         lon, lat = rng.uniform(minx, maxx), rng.uniform(miny, maxy)
-        if not poly.contains(lon, lat):
+        if not polys[boro].contains(Point(lon, lat)):
             continue
         # log-uniform size so small and large boxes are both well represented
+        # creates box around center point
         w = math.exp(rng.uniform(math.log(min_m), math.log(max_m)))
         h = w * rng.uniform(0.75, 1.33)
+        # half the box size in degrees (1 deg latitude ~ 111,320 m; longitude shrinks by cos(lat))
         dlat = h / 111_320 / 2
         dlon = w / (111_320 * math.cos(math.radians(lat))) / 2
+        b = box(lon - dlon, lat - dlat, lon + dlon, lat + dlat)
+        if land.intersection(b).area < 0.5 * b.area or (avoid is not None and avoid.intersects(b)):
+            continue
         rows.append((f"{boro}_{start + len(rows) + 1:05d}", lon - dlon, lat - dlat,
                      lon + dlon, lat + dlat, round(w), round(h)))
     return rows
@@ -82,20 +86,35 @@ def main():
     p.add_argument("--max-m", type=float, default=2500, help="largest box side, meters")
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--out", default="boxes.csv")
+    p.add_argument("--boroughs", nargs="+", default=list(BOROUGHS), choices=list(BOROUGHS))
     p.add_argument("--test-frac", type=float, default=None,
                    help="fraction of boxes in the held-out borough (e.g. 0.1); default: all boroughs area-weighted")
     p.add_argument("--holdout", default="queens", choices=list(BOROUGHS), help="held-out borough for --test-frac")
+    p.add_argument("--test-nta", default=None,
+                   help="with --test-frac: hold out the NTAs whose name contains this text instead of a borough")
+    p.add_argument("--nta-file", default="data/nyc_nta_2020.geojson", help="NYC 2020 NTAs, for land and --test-nta (downloaded if missing)")
+    p.add_argument("--osm-file", default="osm_data/NewYork.gpkg", help="OSM GeoPackage, for water")
     a = p.parse_args()
 
     rng = random.Random(a.seed)
-    polys = {k: Polygon(v) for k, v in BOROUGHS.items()}
+    polys = {k: Polygon(v) for k, v in BOROUGHS.items() if k in a.boroughs}
+    nta = load_nta(a.nta_file)
+    water = gpd.read_file(a.osm_file, layer="multipolygons", where="natural = 'water'")
+    land = nta.union_all().difference(water.union_all())  # every NTA, minus lakes etc.
     if a.test_frac is None:
-        rows = sample_boxes(rng, polys, a.n, a.min_m, a.max_m)
+        rows = sample_boxes(rng, polys, a.n, a.min_m, a.max_m, land)
     else:
         n_test = round(a.n * a.test_frac)
-        rest = {k: v for k, v in polys.items() if k != a.holdout}
-        rows = sample_boxes(rng, rest, a.n - n_test, a.min_m, a.max_m)
-        rows += sample_boxes(rng, {a.holdout: polys[a.holdout]}, n_test, a.min_m, a.max_m, start=len(rows))
+        if a.test_nta:
+            match = nta[nta.NTAName.str.contains(a.test_nta, case=False)]
+            print("test NTAs:", ", ".join(match.NTAName))
+            area = match.union_all()
+            rows = sample_boxes(rng, polys, a.n - n_test, a.min_m, a.max_m, land, avoid=area)
+            test = {a.test_nta.lower().replace(" ", "_"): area}
+        else:
+            rows = sample_boxes(rng, {k: v for k, v in polys.items() if k != a.holdout}, a.n - n_test, a.min_m, a.max_m, land)
+            test = {a.holdout: polys[a.holdout]}
+        rows += sample_boxes(rng, test, n_test, a.min_m, a.max_m, land, start=len(rows))
 
     with open(a.out, "w") as f:
         f.write("name,min_lon,min_lat,max_lon,max_lat,width_m,height_m\n")
