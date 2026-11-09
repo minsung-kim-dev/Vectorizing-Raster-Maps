@@ -10,4 +10,4 @@ MODEL=(--dataset_name=osm --semantic_classes=3 --geom_classes --per_token_sem_lo
        --disable_poly_refine --dec_attn_concat_src --use_anchor --ema4eval)
 
 python ../Raster2Seq/predict.py --checkpoint "$CKPT" --dataset_root "$DATA/$SPLIT" --output_dir predictions "${MODEL[@]}"
-python ../Raster2Seq/eval.py --checkpoint "$CKPT" --dataset_root "$DATA" --eval_set "$SPLIT" --row_tolerance 0.08 --output_dir "eval_outputs/$JOB" "${MODEL[@]}"
+# python ../Raster2Seq/eval.py --checkpoint "$CKPT" --dataset_root "$DATA" --eval_set "$SPLIT" --row_tolerance 0.08 --output_dir "eval_outputs/$JOB" "${MODEL[@]}" --plot_pred '' --plot_density '' --plot_gt ''
