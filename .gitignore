@@ -27,3 +27,5 @@ __pycache__
 wandb/
 wandb_keys/
 save_models/
+predictions/
+eval_outputs/
