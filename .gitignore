@@ -27,3 +27,6 @@ __pycache__
 results/
 data/coco_osm_*buffered*/
 data/coco_osm_125m*/
+wandb/
+wandb_keys/
+save_models/
