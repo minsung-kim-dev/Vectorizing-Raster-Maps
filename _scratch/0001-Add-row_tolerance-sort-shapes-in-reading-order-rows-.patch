@@ -1,0 +1,94 @@
+From 88f86cfe8317a2ae9c367f1db458a44666ad51b9 Mon Sep 17 00:00:00 2001
+From: Jennah Gosciak <jrg377@cornell.edu>
+Date: Fri, 6 Nov 2026 10:09:23 -0500
+Subject: [PATCH] Add --row_tolerance: sort shapes in reading order (rows as a
+ fraction of the image)
+
+---
+ datasets/poly_data.py | 12 ++++++++++--
+ main_ddp.py           |  5 +++++
+ plot_floor.py         |  5 +++++
+ 3 files changed, 20 insertions(+), 2 deletions(-)
+
+diff --git a/datasets/poly_data.py b/datasets/poly_data.py
+index b1f03c3..9cfc815 100644
+--- a/datasets/poly_data.py
++++ b/datasets/poly_data.py
+@@ -369,6 +369,7 @@ class ConvertToCocoDictWithOrder_plus(ConvertToCocoDict):
+         dataset_name="stru3d",
+         order_type="l2r",
+         random_drop_rate=0.0,
++        row_tolerance=None,
+         **kwargs,
+     ):
+         super().__init__(
+@@ -385,6 +386,11 @@ class ConvertToCocoDictWithOrder_plus(ConvertToCocoDict):
+         self.dataset_name = dataset_name
+         self.order_type = order_type  # l2r, r2l
+         self.random_drop_rate = random_drop_rate
++        # Shape order: sort_polygons groups shapes into rows whose top corners are within `tolerance`, then goes
++        # left to right. The default tolerance (20) is applied to 0-1 coordinates, which puts every shape in
++        # one row (pure left-to-right order). row_tolerance sets the row height as a fraction of the image
++        # (e.g. 0.08), giving reading order (rows top to bottom) at any image size; None keeps the original.
++        self.row_tolerance = row_tolerance
+         self.tokenizer = DiscreteTokenizer(add_cls=add_cls_token, **kwargs)
+ 
+     def _get_bilinear_interpolation_coeffs(self, polygons, polygons_label, add_cls_token=False, per_token_class=False):
+@@ -398,11 +404,12 @@ class ConvertToCocoDictWithOrder_plus(ConvertToCocoDict):
+             poly_idx for poly_idx, poly_label in enumerate(polygons_label) if poly_label in WD_INDEX[self.dataset_name]
+         ]
+ 
++        tol = {} if self.row_tolerance is None else {"tolerance": self.row_tolerance}   # polygons are in 0-1 units
+         _, room_sorted_indices = sort_polygons(
+-            [polygons[poly_idx] for poly_idx in room_indices], reverse=(self.order_type == "r2l")
++            [polygons[poly_idx] for poly_idx in room_indices], reverse=(self.order_type == "r2l"), **tol
+         )
+         _, wd_sorted_indices = sort_polygons(
+-            [polygons[poly_idx] for poly_idx in wd_indices], reverse=(self.order_type == "r2l")
++            [polygons[poly_idx] for poly_idx in wd_indices], reverse=(self.order_type == "r2l"), **tol
+         )
+         room_indices = [room_indices[_idx] for _idx in room_sorted_indices]
+         wd_indices = [wd_indices[_idx] for _idx in wd_sorted_indices]
+@@ -585,6 +592,7 @@ def build(image_set, args):
+             mask_format=getattr(args, "mask_format", "polygon"),
+             converter_version=getattr(args, "converter_version", "v1"),
+             random_drop_rate=getattr(args, "random_drop_rate", 0.0),
++            row_tolerance=getattr(args, "row_tolerance", None),
+         )
+ 
+     return dataset
+diff --git a/main_ddp.py b/main_ddp.py
+index b8a62e7..80f5861 100644
+--- a/main_ddp.py
++++ b/main_ddp.py
+@@ -58,6 +58,11 @@ def get_args_parser():
+     parser.add_argument(
+         "--random_drop_rate", type=float, default=0.0, help="randomly drop some polygons during training"
+     )
++    parser.add_argument(
++        "--row_tolerance", type=float, default=None,
++        help="shape order: group shapes into rows of this height, as a fraction of the image (e.g. 0.08) - "
++             "reading order; default: left to right only",
++    )
+ 
+     # raster2seq
+     parser.add_argument("--poly2seq", action="store_true")
+diff --git a/plot_floor.py b/plot_floor.py
+index 94b8cb5..f2a221f 100644
+--- a/plot_floor.py
++++ b/plot_floor.py
+@@ -365,6 +365,11 @@ def get_args_parser():
+     parser.add_argument("--poly2seq", action="store_true")
+     parser.add_argument("--seq_len", type=int, default=1024)
+     parser.add_argument("--num_bins", type=int, default=64)
++    parser.add_argument(
++        "--row_tolerance", type=float, default=None,
++        help="shape order: group shapes into rows of this height, as a fraction of the image (e.g. 0.08) - "
++             "reading order; default: left to right only",
++    )
+     parser.add_argument("--add_cls_token", action="store_true")
+     parser.add_argument("--per_token_sem_loss", action="store_true")
+ 
+-- 
+2.50.1 (Apple Git-155)
+

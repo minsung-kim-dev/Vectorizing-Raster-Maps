@@ -210,7 +210,7 @@ def config():
     a = argparse.ArgumentParser(description="Generate COCO-format data from OSM geojson crops")
     a.add_argument("--data_root", required=True, type=str, help="folder with <name>.geojson.gz and <name>.png")
     a.add_argument("--output", required=True, type=str, help="output dataset root")
-    a.add_argument("--test_borough", default="queens", type=str, help="crops named <test_borough>_* form the test split")
+    a.add_argument("--test_borough", default="queens", type=str, help="crops whose name starts with <test_borough>_ form the test split; any prefix works, e.g. flushing for make_boxes.py --test-nta flushing")
     a.add_argument("--val_frac", default=0.1, type=float, help="val size as a fraction of all crops, test included (taken from non-test crops)")
     a.add_argument("--min_area", default=20.0, type=float, help="drop polygons smaller than this (px^2)")
     a.add_argument("--simplify_tol", default=2.0, type=float,
