@@ -19,7 +19,9 @@ import os
 import random
 import urllib.request
 
+
 import geopandas as gpd
+import shapely
 from shapely.geometry import Point, Polygon, box
 
 NTA_URL = ("https://services5.arcgis.com/GfwWNkhOj9bNBqoJ/arcgis/rest/services/NYC_Neighborhood_Tabulation_Areas_2020/"
@@ -53,12 +55,16 @@ def load_nta(path):
     return gpd.read_file(path)
 
 
-def sample_boxes(rng, polys, n, min_m, max_m, land, start=0, avoid=None):
+def sample_boxes(rng, polys, n, min_m, max_m, land, max_overlap=0.5, start=0, avoid=None):
     """n boxes (name, min_lon, min_lat, max_lon, max_lat, w_m, h_m) centred inside polys (area-weighted),
-    skipping boxes that are less than half `land` or touch the geometry `avoid`."""
+    skipping boxes that are less than half `land`, touch the geometry `avoid`, or share more than
+    `max_overlap` of their area with an earlier box."""
     names, weights = list(polys), [polys[k].area for k in polys]
-    rows = []
+    rows, taken = [], []  # taken: the boxes so far
+    tries = 0
     while len(rows) < n:
+        tries += 1
+        assert tries < 1000 * n, "boxes don't fit: lower --n / --test-frac or raise --max-overlap"
         boro = rng.choices(names, weights)[0]
         minx, miny, maxx, maxy = polys[boro].bounds
         lon, lat = rng.uniform(minx, maxx), rng.uniform(miny, maxy)
@@ -74,6 +80,10 @@ def sample_boxes(rng, polys, n, min_m, max_m, land, start=0, avoid=None):
         b = box(lon - dlon, lat - dlat, lon + dlon, lat + dlat)
         if land.intersection(b).area < 0.5 * b.area or (avoid is not None and avoid.intersects(b)):
             continue
+        # skip if an earlier box covers more than max_overlap of this one
+        if taken and shapely.area(shapely.intersection(taken, b)).max() > max_overlap * b.area:
+            continue
+        taken.append(b)
         rows.append((f"{boro}_{start + len(rows) + 1:05d}", lon - dlon, lat - dlat,
                      lon + dlon, lat + dlat, round(w), round(h)))
     return rows
@@ -94,6 +104,8 @@ def main():
                    help="with --test-frac: hold out the NTAs whose name contains this text instead of a borough")
     p.add_argument("--nta-file", default="data/nyc_nta_2020.geojson", help="NYC 2020 NTAs, for land and --test-nta (downloaded if missing)")
     p.add_argument("--osm-file", default="osm_data/NewYork.gpkg", help="OSM GeoPackage, for water")
+    p.add_argument("--max-overlap", type=float, default=0.5,
+                   help="skip boxes sharing more than this fraction of their area with an earlier box (1 = no limit)")
     a = p.parse_args()
 
     rng = random.Random(a.seed)
@@ -102,19 +114,19 @@ def main():
     water = gpd.read_file(a.osm_file, layer="multipolygons", where="natural = 'water'")
     land = nta.union_all().difference(water.union_all())  # every NTA, minus lakes etc.
     if a.test_frac is None:
-        rows = sample_boxes(rng, polys, a.n, a.min_m, a.max_m, land)
+        rows = sample_boxes(rng, polys, a.n, a.min_m, a.max_m, land, a.max_overlap)
     else:
         n_test = round(a.n * a.test_frac)
         if a.test_nta:
             match = nta[nta.NTAName.str.contains(a.test_nta, case=False)]
             print("test NTAs:", ", ".join(match.NTAName))
             area = match.union_all()
-            rows = sample_boxes(rng, polys, a.n - n_test, a.min_m, a.max_m, land, avoid=area)
+            rows = sample_boxes(rng, polys, a.n - n_test, a.min_m, a.max_m, land, a.max_overlap, avoid=area)
             test = {a.test_nta.lower().replace(" ", "_"): area}
         else:
-            rows = sample_boxes(rng, {k: v for k, v in polys.items() if k != a.holdout}, a.n - n_test, a.min_m, a.max_m, land)
+            rows = sample_boxes(rng, {k: v for k, v in polys.items() if k != a.holdout}, a.n - n_test, a.min_m, a.max_m, land, a.max_overlap)
             test = {a.holdout: polys[a.holdout]}
-        rows += sample_boxes(rng, test, n_test, a.min_m, a.max_m, land, start=len(rows))
+        rows += sample_boxes(rng, test, n_test, a.min_m, a.max_m, land, a.max_overlap, start=len(rows))
 
     with open(a.out, "w") as f:
         f.write("name,min_lon,min_lat,max_lon,max_lat,width_m,height_m\n")
