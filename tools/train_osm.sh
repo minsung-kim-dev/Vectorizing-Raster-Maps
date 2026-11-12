@@ -11,8 +11,8 @@ CROPS=${CROPS:-$REPO/crops}
 DATA=${DATA:-$REPO/data/coco_osm_flushing}
 OUTPUT_DIR=${OUTPUT_DIR:-$REPO/save_models}
 
-IMAGE_SIZE=512    # crops are ~1100 px; 256 loses small shapes
-SEQ_LEN=1024      # fits ~90% of crops completely (1024 fits ~50%)
+IMAGE_SIZE=512    
+SEQ_LEN=1024      
 NUM_BINS=32       # matches Raster2Seq's CubiCasa checkpoint used as the starting point
 ROW_TOL=0.08      # shape order: rows 8% of the image height, top to bottom, left to right (needs the fork)
 CLS_COEFF=5

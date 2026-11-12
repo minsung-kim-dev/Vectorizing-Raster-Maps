@@ -10,7 +10,7 @@ MODEL=(--dataset_name=osm --semantic_classes=3 --geom_classes --per_token_sem_lo
        --image_size 512 --poly2seq --seq_len 1024 --num_bins 32
        --disable_poly_refine --dec_attn_concat_src --use_anchor --ema4eval)
 
-N=20
+N=200
 SUB=$(mktemp -d); mkdir -p "$SUB/$SPLIT" "$SUB/annotations"
 python -c "
 import json, os
