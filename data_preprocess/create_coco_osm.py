@@ -32,6 +32,7 @@ import json
 import math
 import random
 import sys
+import pandas as pd
 from pathlib import Path
 
 import numpy as np
@@ -58,44 +59,16 @@ PARTS = {
 # Anything not listed (and not in SKIP) is labelled "unknown" / "unknown_line" (e.g. military areas / ferries).
 # Labels distinguish the original polygon and line categories. Buffered lines
 # keep their original labels even though their output geometry becomes a polygon.
-VOCAB = {
-    "building":     [("building", "*")],
-    "highway":      [("transportation", c) for c in ("motorway", "motorway_construction", "trunk")],
-    "street":       [("transportation", c) for c in ("primary", "secondary", "tertiary", "minor", "service", "busway",
-                                                     "secondary_construction", "tertiary_construction",
-                                                     "minor_construction", "service_construction")],
-    "path":         [("transportation", "path", "line"), ("transportation", "track"),
-                     ("transportation", "path_construction")],
-    "plaza":        [("transportation", "path", "polygon")],  # pedestrian areas
-    "railway":      [("transportation", "rail"), ("transportation", "transit")],
-    "rail_yard":    [("landuse", "railway")],
-    "bridge":       [("transportation", "bridge")],
-    "pier":         [("transportation", "pier", "line")],
-    "pier_area":    [("transportation", "pier", "polygon")],
-    "water":        [("water", c) for c in ("lake", "pond", "river", "ocean", "dock")],
-    "pool":         [("water", "swimming_pool")],
-    "waterway":     [("waterway", "*")],
-    "park":         [("park", "*"), ("landuse", "recreation_ground"), ("landuse", "zoo"), ("landuse", "theme_park")],
-    "playground":   [("landuse", "playground")],
-    "sports_field": [("landuse", c) for c in ("pitch", "track", "stadium")],
-    "grass":        [("landcover", "grass"), ("landcover", "farmland")],
-    "woods":        [("landcover", "wood")],
-    "wetland":      [("landcover", "wetland")],
-    "bare_ground":  [("landcover", "sand"), ("landcover", "rock")],
-    "school":       [("landuse", c) for c in ("school", "kindergarten", "education", "college", "university")],
-    "hospital":     [("landuse", "hospital")],
-    "civic":        [("landuse", "library"), ("landuse", "bus_station")],
-    "cemetery":     [("landuse", "cemetery")],
-    "residential":  [("landuse", "residential")],
-    "commercial":   [("landuse", "commercial")],
-    "retail":       [("landuse", "retail")],
-    "industrial":   [("landuse", "industrial")],
-    "airport":      [("aeroway", c) for c in ("aerodrome", "apron", "helipad")],
-    "runway":       [("aeroway", "runway", "line"), ("aeroway", "taxiway", "line")],
-    "runway_area":  [("aeroway", "runway", "polygon")],
-    "unknown":      [],  # fallback for polygons not listed above
-    "unknown_line": [],  # fallback for lines not listed above
-}
+vocab_reviewed = pd.read_csv("label_colors_reviewed")
+kept = vocab_reviewed[vocab_reviewed.final_label.notna()] 
+kept["class"] = np.where(kept["class"].notna(), kept["class"], None)  # building: NaN -> None
+kept["subclass"] = np.where(kept["subclass"].notna(), kept["subclass"], None)
+assert not kept.duplicated(["layer", "class", "subclass", "geom"]).any(), "one label per (layer, class, geom)"
+VOCAB = {label: list(zip(g.layer, g["class"], g.subclass, g.geom)) for label, g in kept.groupby("final_label", sort=False)}
+print(VOCAB)
+# VOCAB |= {"unknown": [], "unknown_line": []}
+
+# inverts VOCAB mapping
 LABELS = {key: label for label, keys in VOCAB.items() for key in keys}
 CATEGORIES = {label: i for i, label in enumerate(VOCAB)}
 SKIP = {  # dropped entirely: (layer, class) or (layer, "*")
@@ -104,9 +77,9 @@ SKIP = {  # dropped entirely: (layer, class) or (layer, "*")
 }
 
 
-def label_for(layer, cls, geom_type):
-    """Vocabulary label for an OpenMapTiles feature (most specific key wins), else "unknown"/"unknown_line"."""
-    return (LABELS.get((layer, cls, geom_type)) or LABELS.get((layer, cls)) or LABELS.get((layer, "*"))
+def label_for(layer, cls, subclass, geom_type):
+    """Vocabulary label for an OpenMapTiles feature, else "unknown"/"unknown_line"."""
+    return (LABELS.get((layer, cls, subclass, geom_type)) or LABELS.get((layer, cls, None, geom_type))
             or ("unknown" if geom_type == "polygon" else "unknown_line"))
 
 
