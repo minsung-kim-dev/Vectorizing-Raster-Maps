@@ -86,7 +86,7 @@ def remove_text(arr, halo=3):
     for h in TEXT_COLORS:
         core |= np.abs(arr.astype(np.int16) - rgb(h)).max(-1) <= 12
     region = cv2.dilate(core.astype(np.uint8), disk(halo)).astype(bool)
-    if not region.any():
+    if not region.any() or region.all():  # all text: no pixel outside it to take a colour from
         return arr
     _, (iy, ix) = ndimage.distance_transform_edt(region, return_indices=True)
     return arr[iy, ix]
@@ -95,10 +95,17 @@ def remove_text(arr, halo=3):
 def nearest_color(arr, tol):
     """Index into PALETTE of each pixel's closest colour (max per-channel difference), -1 if none within tol.
     Taking the closest colour stops near-white land (e.g. #f7f5f1) from counting as school (#ffffe5)."""
-    pal = np.array([rgb(h) for h in PALETTE], np.int16)
-    d = np.abs(arr.astype(np.int16)[:, :, None, :] - pal[None, None]).max(-1)
-    idx = d.argmin(-1)
-    idx[np.take_along_axis(d, idx[..., None], -1)[..., 0] > tol] = -1
+    # one palette colour at a time: comparing all at once needs an H x W x colours x 3 array
+    # (~170 MB for a 1100 px crop, ~4x that for --scale 2 crops), which can run out of memory
+    a = arr.astype(np.int16)
+    best = np.full(arr.shape[:2], np.iinfo(np.int16).max, np.int16)
+    idx = np.full(arr.shape[:2], -1, np.intp)
+    for i, h in enumerate(PALETTE):
+        d = np.abs(a - np.array(rgb(h), np.int16)).max(-1)
+        closer = d < best  # strict: ties keep the earlier colour, as argmin did
+        best[closer] = d[closer]
+        idx[closer] = i
+    idx[best > tol] = -1
     return idx
 
 
@@ -202,7 +209,10 @@ def mask_to_lines(m, min_len=8, eps=1.5, close_px=0, spur_len=20):
 def remove_specks(m, min_px=200):
     n, comp, stats, _ = cv2.connectedComponentsWithStats(
         cv2.morphologyEx(m.astype(np.uint8), cv2.MORPH_OPEN, disk(2)), connectivity=4)
-    return np.isin(comp, np.flatnonzero(stats[:, cv2.CC_STAT_AREA] >= min_px)[1:])
+    big = np.flatnonzero(stats[:, cv2.CC_STAT_AREA] >= min_px)
+    # leave out label 0 (the background) by its id: [1:] assumed it was always big enough to be first,
+    # and dropped a real block instead when the mask covers nearly the whole crop
+    return np.isin(comp, big[big != 0])
 
 
 def predict(arr, tol=12, pool_max=3000.0, min_area=20.0, join_px=12):

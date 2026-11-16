@@ -98,7 +98,7 @@ Labels come from the fixed vocabulary `VOCAB` in `create_coco_osm.py` (e.g. `str
 ```shell
 python evaluation/score.py --pred results/<method>/test/predictions.json --data data/coco_osm --split test
 python evaluation/score.py --pred ground_truth      # sanity check: scores the truth against itself, should be 1.0
-python evaluation/test_score.py                      # 6 checks with known answers (empty, half, shifted, relabelled, duplicated)
+python evaluation/test_score.py                      # 7 checks with known answers (empty, half, shifted, relabelled, duplicated, unscorable shapes)
 python evaluation/compare.py results/<run A>/test results/<run B>/test   # print scored runs side by side (no rerun)
 ```
 
@@ -116,7 +116,7 @@ Predictions format, coordinates in pixels of the PNG as stored in the dataset (R
 }
 ```
 
-`label` is a category name from `VOCAB` in `create_coco_osm.py`; `kind` is `polygon` (closed, first point not repeated) or `line` (open). Images missing from the file are scored as empty.
+`label` is a category name from `VOCAB` in `create_coco_osm.py`; `kind` is `polygon` (closed, first point not repeated) or `line` (open). Images missing from the file are scored as empty. Shapes with too few points (polygon < 3, line < 2) or non-finite coordinates are dropped with a warning; a malformed file (missing keys, unknown `kind`, points not `[x, y]` pairs) stops with an error naming the image and shape.
 
 Outputs, next to the predictions file:
 - `per_label.csv`: true / predicted / matched shapes, precision, recall, F1 and pixel IoU per label

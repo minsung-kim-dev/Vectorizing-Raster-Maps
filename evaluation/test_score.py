@@ -61,6 +61,14 @@ def main():
     results.append(check("duplicates count once: recall 1, precision 0.5",
                          s["recall"] == 1.0 and s["precision"] == 0.5, s))
 
+    junk = [{"label": "building", "kind": "polygon", "points": [[0, 0], [5, 5]]},  # too few points
+            {"label": "street", "kind": "line", "points": [[3, 3]]},
+            {"label": "street", "kind": "line", "points": []},
+            {"label": "building", "kind": "polygon", "points": [[0, 0], [9, 0], [float("nan"), 9]]}]
+    s = run("truth plus unscorable shapes", {f: shapes + junk for f, shapes in gt.items()})
+    results.append(check("shapes with too few / non-finite points are dropped, not crashed on",
+                         s["precision"] == s["recall"] == 1.0, s))
+
     print(f"\n{sum(results)} of {len(results)} checks passed")
     sys.exit(0 if all(results) else 1)
 

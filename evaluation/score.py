@@ -77,6 +77,44 @@ def save_predictions(path, method, images):
         json.dump({"method": method, "images": images}, fh)
 
 
+def clean_predictions(predictions):
+    """Check the predictions' format and drop shapes that can't be scored.
+
+    Badly formed input (not a list of shapes, missing keys, unknown kind, points that aren't [x, y] pairs)
+    raises an error naming the image and shape, instead of failing later inside shapely or OpenCV.
+    Shapes with too few points (a polygon needs 3, a line 2) or non-finite coordinates are dropped with a
+    warning: they cover no area, so the scorer would have dropped them as invisible anyway."""
+    if not isinstance(predictions, dict):
+        raise ValueError(f"predictions: expected {{file_name: [shape, ...]}}, got {type(predictions).__name__}")
+    clean, dropped = {}, 0
+    for name, shapes in predictions.items():
+        if not isinstance(shapes, list):
+            raise ValueError(f"predictions for {name}: expected a list of shapes, got {type(shapes).__name__}")
+        kept = []
+        for n, s in enumerate(shapes):
+            where = f"predictions for {name}, shape {n}"
+            if not isinstance(s, dict) or not {"label", "kind", "points"} <= s.keys():
+                raise ValueError(f"{where}: each shape needs 'label', 'kind' and 'points'")
+            if s["kind"] not in ("polygon", "line"):
+                raise ValueError(f"{where}: kind must be 'polygon' or 'line', not {s['kind']!r}")
+            try:
+                pts = np.asarray(s["points"], float)
+            except (TypeError, ValueError):
+                pts = None
+            if pts is None or (pts.size and (pts.ndim != 2 or pts.shape[1] != 2)):
+                raise ValueError(f"{where}: points must be a list of [x, y] pairs")
+            pts = pts.reshape(-1, 2)
+            if len(pts) < (3 if s["kind"] == "polygon" else 2) or not np.isfinite(pts).all():
+                dropped += 1
+                continue
+            # str label: an int label would break sorting labels next to the dataset's string labels
+            kept.append({**s, "label": str(s["label"]), "points": pts.tolist()})
+        clean[name] = kept
+    if dropped:
+        print(f"warning: dropped {dropped} predicted shapes with too few points or non-finite coordinates")
+    return clean
+
+
 # ---------------------------------------------------------------------------------------------
 # Geometry
 # ---------------------------------------------------------------------------------------------
@@ -241,9 +279,14 @@ def f1(p, r):
     return 2 * p * r / (p + r) if p + r else 0.0
 
 
-def write_csv(path, rows):
+PER_IMAGE_FIELDS = ["image", "true", "predicted", "matched", "precision", "recall"]
+PER_BIN_FIELDS = ["factor", "bin", "true", "matched", "recall"]
+
+
+def write_csv(path, rows, fieldnames=None):
+    """fieldnames is needed when rows can be empty (no images, or no true shapes): a header-only file is written."""
     with open(path, "w", newline="", encoding="utf-8") as fh:
-        w = csv.DictWriter(fh, fieldnames=list(rows[0]))
+        w = csv.DictWriter(fh, fieldnames=fieldnames or list(rows[0]))
         w.writeheader()
         w.writerows(rows)
 
@@ -268,6 +311,7 @@ def score(data, split, predictions, out, method="prediction", line_buffer_px=2.0
 
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
+    predictions = clean_predictions(predictions)
     images, gts = load_coco(data, split)
     if limit:
         images = images[:limit]
@@ -343,8 +387,12 @@ def score(data, split, predictions, out, method="prediction", line_buffer_px=2.0
                "f1": round(f1(p, r), 3), "pixel_iou": round(ratio(sum(inter.values()), sum(union.values())), 3)}
     table.append({"label": "ALL", **overall})
     with_truth = [t for t in table[:-1] if t["true"]]
-    macro = {k: round(float(np.mean([t[k] for t in with_truth if t[k] != ""])), 3) if with_truth else 0.0
-             for k in ("precision", "recall", "f1", "pixel_iou")}
+
+    def macro_mean(k):  # 0.0 when no label has a value (np.mean of [] would give NaN, which isn't valid JSON)
+        vals = [t[k] for t in with_truth if t[k] != ""]
+        return round(float(np.mean(vals)), 3) if vals else 0.0
+
+    macro = {k: macro_mean(k) for k in ("precision", "recall", "f1", "pixel_iou")}
 
     bin_rows = [{"factor": f, "bin": v, "true": n, "matched": bin_hit[f, v], "recall": round(ratio(bin_hit[f, v], n), 3)}
                 for (f, v), n in sorted(bin_true.items())]
@@ -353,8 +401,8 @@ def score(data, split, predictions, out, method="prediction", line_buffer_px=2.0
                "macro_over_labels": macro, "overall_95ci": bootstrap(rows) if rows else {}}
 
     write_csv(out / "per_label.csv", table)
-    write_csv(out / "per_image.csv", rows)
-    write_csv(out / "per_bin.csv", bin_rows)
+    write_csv(out / "per_image.csv", rows, PER_IMAGE_FIELDS)
+    write_csv(out / "per_bin.csv", bin_rows, PER_BIN_FIELDS)
     with open(out / "summary.json", "w", encoding="utf-8") as fh:
         json.dump(summary, fh, indent=2)
 
