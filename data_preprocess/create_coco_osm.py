@@ -65,12 +65,15 @@ kept["class"] = np.where(kept["class"].notna(), kept["class"], None)  # building
 kept["subclass"] = np.where(kept["subclass"].notna(), kept["subclass"], None)
 assert not kept.duplicated(["layer", "class", "subclass", "geom"]).any(), "one label per (layer, class, geom)"
 VOCAB = {label: list(zip(g.layer, g["class"], g.subclass, g.geom)) for label, g in kept.groupby("final_label", sort=False)}
-print(VOCAB)
-# VOCAB |= {"unknown": [], "unknown_line": []}
+if 'unknown' not in VOCAB.keys():
+    VOCAB |= {"unknown": []}
+if 'unknown_line' not in VOCAB.keys():
+    VOCAB |= {"unknown_line": []}
 
 # inverts VOCAB mapping
 LABELS = {key: label for label, keys in VOCAB.items() for key in keys}
 CATEGORIES = {label: i for i, label in enumerate(VOCAB)}
+
 SKIP = {  # dropped entirely: (layer, class) or (layer, "*")
     ("transportation_name", "*"), ("water_name", "*"),  # copies of other features, only used to place names
     ("boundary", "*"), ("landuse", "neighbourhood"),      # administrative, not drawn as visible features
@@ -88,11 +91,11 @@ def extract_geometries(data, to_px):
     out = []
     for f in data["features"]:
         g, props = f["geometry"], f["properties"]
-        layer, cls = props["omt_layer"], props.get("class")
+        layer, cls, subclass = props["omt_layer"], props.get("class"), props.get("subclass")
         if g["type"] not in PARTS or (layer, cls) in SKIP or (layer, "*") in SKIP:
             continue
         geom_type, parts = PARTS[g["type"]](g["coordinates"])
-        label = label_for(layer, cls, geom_type)
+        label = label_for(layer, cls, subclass, geom_type)
         is_poly = geom_type == "polygon"
         for part in parts:
             # every point except the last point
@@ -249,6 +252,7 @@ def main(args):
         print(f"{split}: {len(split_files)} images, {len(coco['annotations'])} annotations")
 
     print("categories:", CATEGORIES)
+    print("# of categories:", len(CATEGORIES))
 
 
 if __name__ == "__main__":

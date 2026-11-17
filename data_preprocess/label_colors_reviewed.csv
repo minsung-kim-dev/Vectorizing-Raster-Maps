@@ -10,7 +10,7 @@
 60,transportation,path,corridor,line,path,11,8,0.002,path,#5a5a5a,7,path
 31,transportation,path,platform,polygon,plaza,144,76,0.015,path,#5a5a5a,7,plaza
 14,transportation,rail,rail,line,railway,777,362,0.072,rail,#707070,17,railway
-43,boundary,,,line,(skipped),46,45,0.009,boundary,#8d618b,6,administrative
+43,boundary,,,line,(skipped),46,45,0.009,boundary,#8d618b,6,
 39,transportation,track,,line,path,68,60,0.012,track,#996600,7,path
 17,landuse,cemetery,,polygon,cemetery,358,245,0.049,cemetery,#aacbaf,1,cemetery
 4,water,swimming_pool,,polygon,pool,5857,1964,0.393,water,#aad3df,2,pool
