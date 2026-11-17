@@ -29,14 +29,16 @@ Skip to the [Training](#training) section to understand how to train and evaluat
 ## Setting up the VM (Google Cloud)
 Create the VM with the GPU attached (GPU quota needed; T4/L4/V100 on N1/G2, A100 on A2).
 ### 1. NVIDIA driver
-Check first: `nvidia-smi`. If it fails, install the driver. On a Deep Learning VM image: `sudo /opt/deeplearning/install-driver.sh`.
+Check first: `nvidia-smi`. If it fails, install the driver. 
+
+On a Deep Learning VM image: `sudo /opt/deeplearning/install-driver.sh`.
 Otherwise:
 ```bash
 curl -L https://raw.githubusercontent.com/GoogleCloudPlatform/compute-gpu-installation/main/linux/install_gpu_driver.py -o install_gpu_driver.py
 sudo python3 install_gpu_driver.py
 sudo reboot
 ```
-After reboot, `nvidia-smi` should list the GPU (see Google's "Install GPU drivers" docs if the script has moved).
+After reboot, `nvidia-smi` should list the GPU.
 
 ### 2. Conda + env
 The system Python (3.13) is not used; the env has its own Python 3.10.
@@ -55,7 +57,7 @@ which python   # ~/miniconda3/envs/raster2seq/bin/python
 Important: ensure that the (forked) Raster2Seq repository is stored adjacent to the 
 ```bash
 cd ~
-git clone -b osm-changes https://github.com/jennahgosciak/Raster2Seq.git
+git clone https://github.com/jennahgosciak/Raster2Seq.git
 git clone <vectorizing-raster-maps repo URL>
 ```
 
@@ -70,7 +72,7 @@ pip check
 
 ### 5. Attention setup
 ```bash
-pip install ninja   # the build fails without it
+pip install ninja  # the build fails without it
 cd ~/Raster2Seq/models/ops && sh make.sh && cd ~
 python -c "import torch, MultiScaleDeformableAttention; print(torch.cuda.is_available(), torch.version.cuda)"   # True 12.1
 ```
@@ -141,7 +143,7 @@ Options:
 - `--simplify_tol` – shape simplification tolerance in px, `0` = off (default `1.0`)
 - `--line_buffer_px` – buffer radius in original PNG pixels for line features; must be positive (default: no buffering)
 
-### Defining labels:
+### 3. Defining labels
 
 Labels come from the fixed vocabulary `VOCAB` in `create_coco_osm.py` (e.g. `street`, `building`, `park`). Anything not listed becomes `unknown` / `unknown_line`. When training with labels, set `--semantic_classes` to the number of labels + 1. We hand-reviewed the vocabulary.
 
