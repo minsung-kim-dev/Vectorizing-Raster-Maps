@@ -8,8 +8,8 @@ set -euo pipefail
 REPO=$(cd "$(dirname "$0")/../../.." && pwd)
 R2S=${R2S:-$REPO/../Raster2Seq}
 CROPS=${CROPS:-$REPO/crops}
-DATA=${DATA:-$REPO/data/coco_osm_flushing}
-OUTPUT_DIR=${OUTPUT_DIR:-$REPO/save_models}
+DATA=${DATA:-/share/garg/jrg377/coco_osm_newvocab}
+OUTPUT_DIR=${OUTPUT_DIR:-/share/garg/jrg377/osm_stage2_queens4000_newvocab_checkpoints}
 
 IMAGE_SIZE=512    
 SEQ_LEN=1024      
@@ -36,7 +36,7 @@ torchrun --nproc_per_node=${NUM_GPUS} --master_port=14159 main_ddp.py \
     --dataset_name=osm \
     --dataset_root="$DATA" \
     --semantic_classes=${SEM_CLASSES} \
-    --job_name=osm_stage2_queens_4000pretrain \
+    --job_name=osm_stage2_queens_4000pretrain_newvocab \
     --output_dir "$OUTPUT_DIR" \
     --batch_size ${BATCH_SIZE} \
     --input_channels=3 \
@@ -53,7 +53,7 @@ torchrun --nproc_per_node=${NUM_GPUS} --master_port=14159 main_ddp.py \
     --cls_loss_coef ${CLS_COEFF} \
     --coords_loss_coef ${COO_COEFF} \
     --room_cls_loss_coef ${SEM_COEFF} \
-    --resume "$OUTPUT_DIR/osm_stage2_queens_4000pretrain/checkpoint.pth" \
+    --resume "$OUTPUT_DIR/osm_stage2_queens_4000pretrain_newvocab/checkpoint.pth" \
     --ema4eval \
     --disable_poly_refine \
     --dec_attn_concat_src \
@@ -63,5 +63,6 @@ torchrun --nproc_per_node=${NUM_GPUS} --master_port=14159 main_ddp.py \
     --use_anchor \
     --add_geom_head \
     --geom_mask \
+    --sem_attn \
     --disable_wd_as_line \
-    --start_from_checkpoint "$OUTPUT_DIR/osm_stage_queens4000_pretrain/checkpoint.pth"
+    --start_from_checkpoint "/share/garg/jrg377/osm_stage_queens4000_pretrain/checkpoint.pth"

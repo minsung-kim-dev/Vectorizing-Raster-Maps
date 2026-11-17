@@ -32,20 +32,4 @@ for i in d['images']: os.symlink(os.path.abspath('$DATA/$SPLIT/' + i['file_name'
 done
 wait
 
-# every metric is an average over images: weight each part by its image count, then recompute F1
-python - "$OUT" "$SHARDS" "$SPLIT" "$K" <<'EOF'
-import json, sys
-out, shards, split, k = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
-parts = [(json.load(open(f"{out}/part{i}/results.txt")),
-          len(json.load(open(f"{shards}/{i}/annotations/{split}.json"))["images"])) for i in range(k)]
-n = sum(c for _, c in parts)
-res = {key: sum(r[key] * c for r, c in parts) / n
-       for key, v in parts[0][0].items() if isinstance(v, (int, float)) and not key.endswith("_f1")}
-for m in ["room", "corner", "angles", "room_sem", "line", "line_sem"]:
-    p, r = res.get(f"{m}_prec"), res.get(f"{m}_rec")
-    if p is not None and r is not None:
-        res[f"{m}_f1"] = 2 * p * r / (p + r) if p + r else 0.0
-res["images"] = n
-json.dump(res, open(f"{out}/results.txt", "w"), indent=1)
-print(json.dumps(res, indent=1))
-EOF
+python tools/raster2seq_modified/evaluation/combine_resutls.py "$OUT"
