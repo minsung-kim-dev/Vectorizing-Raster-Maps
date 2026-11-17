@@ -96,7 +96,7 @@ def main():
     p.add_argument("--test-frac", type=float, default=None,
                    help="fraction of boxes in the held-out borough (e.g. 0.1); default: all boroughs area-weighted")
     p.add_argument("--holdout", default="queens", choices=list(BOROUGHS), help="held-out borough for --test-frac")
-    p.add_argument("--test-nta", default=None,
+    p.add_argument("--test-nta", default='flushing',
                    help="with --test-frac: hold out the NTAs whose name contains this text instead of a borough")
     p.add_argument("--nta-file", default="data/nyc_nta_2020.geojson", help="NYC 2020 NTAs, for land and --test-nta (downloaded if missing)")
     p.add_argument("--osm-file", default="osm_data/NewYork.gpkg", help="OSM GeoPackage, for water")
@@ -105,23 +105,29 @@ def main():
     a = p.parse_args()
 
     rng = random.Random(a.seed)
+    # here, will just be filtered to Queens (not all of the city)
     polys = {k: Polygon(v) for k, v in BOROUGHS.items() if k in a.boroughs}
-    nta = load_nta(a.nta_file)
+    nta = load_nta(a.nta_file) # load nta file
+    # load water
     water = gpd.read_file(a.osm_file, layer="multipolygons", where="natural = 'water'")
-    land = nta.union_all().difference(water.union_all())  # every NTA, minus lakes etc.
+    # load land (from nta file)
+    land = nta.union_all().difference(water.union_all())  # every NTA, clipped to shoreline
     if a.test_frac is None:
+        # number of images for train
         rows = sample_boxes(rng, polys, a.n, a.min_m, a.max_m, land, a.max_overlap)
     else:
+        # number of images to go in test data
         n_test = round(a.n * a.test_frac)
-        if a.test_nta:
-            match = nta[nta.NTAName.str.contains(a.test_nta, case=False)]
-            print("test NTAs:", ", ".join(match.NTAName))
-            area = match.union_all()
-            rows = sample_boxes(rng, polys, a.n - n_test, a.min_m, a.max_m, land, a.max_overlap, avoid=area)
-            test = {a.test_nta.lower().replace(" ", "_"): area}
-        else:
-            rows = sample_boxes(rng, {k: v for k, v in polys.items() if k != a.holdout}, a.n - n_test, a.min_m, a.max_m, land, a.max_overlap)
-            test = {a.holdout: polys[a.holdout]}
+
+        # match based on keyword ("Flushing")
+        match = nta[nta.NTAName.str.contains(a.test_nta, case=False)]
+        print("test NTAs:", ", ".join(match.NTAName))
+        # union
+        area = match.union_all()
+        # avoid = exlcudes area from the 'Flushing' ntas
+        rows = sample_boxes(rng, polys, a.n - n_test, a.min_m, a.max_m, land, a.max_overlap, avoid=area)
+        # test data
+        test = {a.test_nta.lower().replace(" ", "_"): area}
         rows += sample_boxes(rng, test, n_test, a.min_m, a.max_m, land, a.max_overlap, start=len(rows))
 
     with open(a.out, "w") as f:
