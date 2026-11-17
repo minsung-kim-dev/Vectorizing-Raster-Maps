@@ -30,7 +30,9 @@ def resort_corners(corners):
     x_y_square_sum = corners[:, 0] ** 2 + corners[:, 1] ** 2
     start_corner_idx = np.argmin(x_y_square_sum)
 
-    corners_sorted = np.concatenate([corners[start_corner_idx:], corners[:start_corner_idx]])
+    corners_sorted = np.concatenate(
+        [corners[start_corner_idx:], corners[:start_corner_idx]]
+    )
 
     ## sort points clockwise
     if not is_clockwise(corners_sorted[:, :2].tolist()):

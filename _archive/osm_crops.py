@@ -1,4 +1,4 @@
-1#!/usr/bin/env python3
+1  #!/usr/bin/env python3
 """
 osm_crops.py: download a regional OpenStreetMap extract once, then render
 PNG/JPEG images of the vector data for a list of bounding boxes.
@@ -47,33 +47,72 @@ DPI = 100
 MIN_LW = 0.3  # thinnest line drawn, in points
 
 STYLES = {
-    "light": dict(bg="#f2efe9", landuse="#e6e2da", green="#cde6c0", water="#aad3df",
-                  building="#d9d0c9", building_edge="#c4b8ae", major="#f6b26b",
-                  mid="#fde9a9", minor="#ffffff", path="#d98c7a", rail="#7a7a7a"),
-    "dark": dict(bg="#1b1d22", landuse="#22252b", green="#1f3326", water="#16304a",
-                 building="#3a3d45", building_edge="#4a4e57", major="#e0a458",
-                 mid="#c9c9c9", minor="#8a8f99", path="#5a5f69", rail="#9a9a9a"),
+    "light": dict(
+        bg="#f2efe9",
+        landuse="#e6e2da",
+        green="#cde6c0",
+        water="#aad3df",
+        building="#d9d0c9",
+        building_edge="#c4b8ae",
+        major="#f6b26b",
+        mid="#fde9a9",
+        minor="#ffffff",
+        path="#d98c7a",
+        rail="#7a7a7a",
+    ),
+    "dark": dict(
+        bg="#1b1d22",
+        landuse="#22252b",
+        green="#1f3326",
+        water="#16304a",
+        building="#3a3d45",
+        building_edge="#4a4e57",
+        major="#e0a458",
+        mid="#c9c9c9",
+        minor="#8a8f99",
+        path="#5a5f69",
+        rail="#9a9a9a",
+    ),
 }
 
 # highway tag -> (style group, approximate real-world width in meters)
 ROAD_CLASSES = {
-    "motorway": ("major", 14), "motorway_link": ("major", 8),
-    "trunk": ("major", 12), "trunk_link": ("major", 7),
-    "primary": ("major", 10), "primary_link": ("major", 6),
-    "secondary": ("mid", 9), "secondary_link": ("mid", 5),
-    "tertiary": ("mid", 8), "tertiary_link": ("mid", 5),
-    "residential": ("minor", 6), "unclassified": ("minor", 6),
-    "living_street": ("minor", 5), "service": ("minor", 4),
-    "pedestrian": ("path", 4), "track": ("path", 3),
-    "footway": ("path", 1.5), "path": ("path", 1.5),
-    "cycleway": ("path", 1.5), "steps": ("path", 1.5),
+    "motorway": ("major", 14),
+    "motorway_link": ("major", 8),
+    "trunk": ("major", 12),
+    "trunk_link": ("major", 7),
+    "primary": ("major", 10),
+    "primary_link": ("major", 6),
+    "secondary": ("mid", 9),
+    "secondary_link": ("mid", 5),
+    "tertiary": ("mid", 8),
+    "tertiary_link": ("mid", 5),
+    "residential": ("minor", 6),
+    "unclassified": ("minor", 6),
+    "living_street": ("minor", 5),
+    "service": ("minor", 4),
+    "pedestrian": ("path", 4),
+    "track": ("path", 3),
+    "footway": ("path", 1.5),
+    "path": ("path", 1.5),
+    "cycleway": ("path", 1.5),
+    "steps": ("path", 1.5),
 }
 GROUP_ORDER = ["path", "minor", "mid", "major"]  # draw bottom -> top
 
 GREEN = dict(
     leisure=["park", "garden", "pitch", "golf_course", "nature_reserve", "playground"],
-    landuse=["grass", "forest", "meadow", "recreation_ground", "cemetery",
-             "village_green", "orchard", "vineyard", "allotments"],
+    landuse=[
+        "grass",
+        "forest",
+        "meadow",
+        "recreation_ground",
+        "cemetery",
+        "village_green",
+        "orchard",
+        "vineyard",
+        "allotments",
+    ],
     natural=["wood", "scrub", "grassland", "heath"],
 )
 WATER = dict(natural=["water", "bay", "wetland"], landuse=["reservoir", "basin"])
@@ -99,8 +138,9 @@ def to_gpkg(pbf: Path, gpkg: Path, clip=None) -> None:
     print(f"[convert] {pbf.name} -> {gpkg.name} (one-time, can take a while)")
     if shutil.which("ogr2ogr"):
         spat = ["-spat", *map(str, clip)] if clip else []
-        subprocess.run(["ogr2ogr", "-f", "GPKG", *spat, str(gpkg), str(pbf), *LAYERS],
-                       check=True)
+        subprocess.run(
+            ["ogr2ogr", "-f", "GPKG", *spat, str(gpkg), str(pbf), *LAYERS], check=True
+        )
     else:
         for layer in LAYERS:
             df = pyogrio.read_dataframe(pbf, layer=layer, bbox=clip)
@@ -127,8 +167,18 @@ def has(df, field: str) -> pd.Series:
     return df[field].notna()
 
 
-def render(gpkg, name, bbox, out_dir, width_px, fmt, style, water_path=None,
-           mpp=None, max_px=12000):
+def render(
+    gpkg,
+    name,
+    bbox,
+    out_dir,
+    width_px,
+    fmt,
+    style,
+    water_path=None,
+    mpp=None,
+    max_px=12000,
+):
     min_lon, min_lat, max_lon, max_lat = bbox
     to3857 = Transformer.from_crs(4326, 3857, always_xy=True)
     x0, y0 = to3857.transform(min_lon, min_lat)
@@ -163,8 +213,12 @@ def render(gpkg, name, bbox, out_dir, width_px, fmt, style, water_path=None,
                 sel.plot(ax=ax, color=style[color], linewidth=0)
         bld = polys[has(polys, "building")]
         if len(bld):
-            bld.plot(ax=ax, color=style["building"], edgecolor=style["building_edge"],
-                     linewidth=0.3 if k > 0.5 else 0)
+            bld.plot(
+                ax=ax,
+                color=style["building"],
+                edgecolor=style["building_edge"],
+                linewidth=0.3 if k > 0.5 else 0,
+            )
 
     if len(lines):
         ww = lines[match(lines, dict(waterway=["river", "stream", "canal"]))]
@@ -176,7 +230,9 @@ def render(gpkg, name, bbox, out_dir, width_px, fmt, style, water_path=None,
                 for tag, (g, w) in ROAD_CLASSES.items():
                     sel = lines[hw == tag] if g == group else []
                     if len(sel):
-                        sel.plot(ax=ax, color=style[group], linewidth=max(MIN_LW, w * k))
+                        sel.plot(
+                            ax=ax, color=style[group], linewidth=max(MIN_LW, w * k)
+                        )
         rail = lines[has(lines, "railway")]
         if len(rail):
             rail.plot(ax=ax, color=style["rail"], linewidth=max(MIN_LW, 2 * k))
@@ -195,11 +251,29 @@ def render_job(job):
     name, bbox, kw = job
     try:
         path, w, h = render(name=name, bbox=bbox, **kw)
-        return dict(name=name, file=path.name, width=w, height=h, error="",
-                    min_lon=bbox[0], min_lat=bbox[1], max_lon=bbox[2], max_lat=bbox[3])
+        return dict(
+            name=name,
+            file=path.name,
+            width=w,
+            height=h,
+            error="",
+            min_lon=bbox[0],
+            min_lat=bbox[1],
+            max_lon=bbox[2],
+            max_lat=bbox[3],
+        )
     except Exception as e:  # noqa: BLE001
-        return dict(name=name, file="", width=0, height=0, error=repr(e),
-                    min_lon=bbox[0], min_lat=bbox[1], max_lon=bbox[2], max_lat=bbox[3])
+        return dict(
+            name=name,
+            file="",
+            width=0,
+            height=0,
+            error=repr(e),
+            min_lon=bbox[0],
+            min_lat=bbox[1],
+            max_lon=bbox[2],
+            max_lat=bbox[3],
+        )
 
 
 def prepare_water(shp: Path, out: Path, clip) -> None:
@@ -216,34 +290,61 @@ def prepare_water(shp: Path, out: Path, clip) -> None:
 
 # ---------------------------------------------------------------- main
 def main():
-    p = argparse.ArgumentParser(description=__doc__,
-                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     src = p.add_mutually_exclusive_group(required=True)
     src.add_argument("--pbf-url", help="URL of a .osm.pbf extract (e.g. Geofabrik)")
     src.add_argument("--pbf", type=Path, help="local .osm.pbf file")
-    p.add_argument("--boxes", type=Path, required=True,
-                   help="CSV with name,min_lon,min_lat,max_lon,max_lat")
+    p.add_argument(
+        "--boxes",
+        type=Path,
+        required=True,
+        help="CSV with name,min_lon,min_lat,max_lon,max_lat",
+    )
     p.add_argument("--out", type=Path, default=Path("crops"))
     p.add_argument("--workdir", type=Path, default=Path("osm_data"))
     size = p.add_mutually_exclusive_group()
-    size.add_argument("--width", type=int, default=1024,
-                      help="fixed image width in pixels (default; scale varies by box)")
-    size.add_argument("--mpp", type=float,
-                      help="fixed meters per pixel instead (image size varies by box)")
-    p.add_argument("--max-px", type=int, default=12000,
-                   help="cap on either image dimension")
+    size.add_argument(
+        "--width",
+        type=int,
+        default=1024,
+        help="fixed image width in pixels (default; scale varies by box)",
+    )
+    size.add_argument(
+        "--mpp",
+        type=float,
+        help="fixed meters per pixel instead (image size varies by box)",
+    )
+    p.add_argument(
+        "--max-px", type=int, default=12000, help="cap on either image dimension"
+    )
     p.add_argument("--format", choices=["png", "jpg"], default="png")
     p.add_argument("--style", choices=list(STYLES), default="light")
-    p.add_argument("--region-bbox", type=float, nargs=4,
-                   metavar=("MIN_LON", "MIN_LAT", "MAX_LON", "MAX_LAT"),
-                   help="only keep data inside this box when converting (saves time/disk)")
-    p.add_argument("--water", type=Path,
-                   help="optional water polygons shapefile (water-polygons-split-4326 "
-                        "from osmdata.openstreetmap.de) to fill sea and harbor areas")
-    p.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 1),
-                   help="parallel render processes")
-    p.add_argument("--overwrite", action="store_true",
-                   help="re-render images that already exist (default: skip them)")
+    p.add_argument(
+        "--region-bbox",
+        type=float,
+        nargs=4,
+        metavar=("MIN_LON", "MIN_LAT", "MAX_LON", "MAX_LAT"),
+        help="only keep data inside this box when converting (saves time/disk)",
+    )
+    p.add_argument(
+        "--water",
+        type=Path,
+        help="optional water polygons shapefile (water-polygons-split-4326 "
+        "from osmdata.openstreetmap.de) to fill sea and harbor areas",
+    )
+    p.add_argument(
+        "--workers",
+        type=int,
+        default=max(1, (os.cpu_count() or 2) - 1),
+        help="parallel render processes",
+    )
+    p.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="re-render images that already exist (default: skip them)",
+    )
     a = p.parse_args()
 
     a.workdir.mkdir(parents=True, exist_ok=True)
@@ -263,8 +364,16 @@ def main():
         water_gpkg = a.workdir / f"water{suffix}.gpkg"
         prepare_water(a.water, water_gpkg, a.region_bbox)
 
-    kw = dict(gpkg=gpkg, out_dir=a.out, width_px=a.width, fmt=a.format,
-              style=STYLES[a.style], water_path=water_gpkg, mpp=a.mpp, max_px=a.max_px)
+    kw = dict(
+        gpkg=gpkg,
+        out_dir=a.out,
+        width_px=a.width,
+        fmt=a.format,
+        style=STYLES[a.style],
+        water_path=water_gpkg,
+        mpp=a.mpp,
+        max_px=a.max_px,
+    )
 
     boxes = pd.read_csv(a.boxes)
     jobs, skipped = [], 0
@@ -299,8 +408,10 @@ def main():
     if not new.empty:
         new.to_csv(index_path, index=False)
     errors = sum(1 for r in results if r["error"])
-    print(f"done: {len(results) - errors} rendered, {errors} failed, "
-          f"{skipped} skipped -> {a.out}/")
+    print(
+        f"done: {len(results) - errors} rendered, {errors} failed, "
+        f"{skipped} skipped -> {a.out}/"
+    )
 
 
 if __name__ == "__main__":

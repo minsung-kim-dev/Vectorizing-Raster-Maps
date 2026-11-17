@@ -24,6 +24,7 @@ Usage:
     python render_omt.py crop.geojson.gz [--zoom Z] [--scale 1|2] [-o out.png]
 Zoom defaults to metadata.camera_zoom. Style zoom = zoom - 1 (the style is written for 512px tiles).
 """
+
 import argparse, colorsys, gzip, io, json, math, os, re, sys
 from functools import lru_cache
 from pathlib import Path as FilePath
@@ -42,16 +43,29 @@ from PIL import Image
 
 STYLE_DIR = FilePath(__file__).resolve().parent / "omt_style"
 ICON_DIR = STYLE_DIR / "icons"
-FONT_WEIGHTS = {"Light": "light", "Regular": "normal", "Semibold": "semibold", "Bold": "bold"}
+FONT_WEIGHTS = {
+    "Light": "light",
+    "Regular": "normal",
+    "Semibold": "semibold",
+    "Bold": "bold",
+}
 
 
 def load_style(style_dir=STYLE_DIR):
     """All style rules (layers/*/style.json), sorted by their 'order', plus the background colour."""
     header = json.load(open(style_dir / "style-header.json"))
-    rules = [l for f in sorted(style_dir.glob("*.json")) if f.name != "style-header.json"
-             for l in json.load(open(f))["layers"]]
+    rules = [
+        l
+        for f in sorted(style_dir.glob("*.json"))
+        if f.name != "style-header.json"
+        for l in json.load(open(f))["layers"]
+    ]
     rules.sort(key=lambda l: l["order"])
-    background = next(l["paint"]["background-color"] for l in header["layers"] if l["type"] == "background")
+    background = next(
+        l["paint"]["background-color"]
+        for l in header["layers"]
+        if l["type"] == "background"
+    )
     return background, rules
 
 
@@ -75,23 +89,31 @@ def style_colours(style_dir=STYLE_DIR):
         walk(r.get("paint", {}))
     return sorted(cols)
 
+
 # ----------------------------------------------------------------------------
 # Icons, patterns and fonts from the style
 # ----------------------------------------------------------------------------
 
+
 def require_cairo():
     try:
         import cairosvg
-        cairosvg.svg2png(bytestring=b'<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>')
+
+        cairosvg.svg2png(
+            bytestring=b'<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>'
+        )
     except Exception as e:
-        raise RuntimeError("render_omt.py draws the style's SVG patterns and icons with cairosvg, which needs "
-                           "the cairo library: conda install -c conda-forge cairosvg cairo") from e
+        raise RuntimeError(
+            "render_omt.py draws the style's SVG patterns and icons with cairosvg, which needs "
+            "the cairo library: conda install -c conda-forge cairosvg cairo"
+        ) from e
 
 
 @lru_cache(maxsize=None)
 def icon_image(name, scale):
     """The style's icon utils/omt_style/icons/<name>.svg as an RGBA float array."""
     import cairosvg
+
     png = cairosvg.svg2png(url=str(ICON_DIR / f"{name}.svg"), scale=scale)
     return np.asarray(Image.open(io.BytesIO(png)).convert("RGBA")) / 255.0
 
@@ -124,12 +146,16 @@ def font_props(stack):
             return prop
         except ValueError:
             continue
-    raise RuntimeError(f"none of the style's fonts {list(stack)} is installed "
-                       "(e.g. brew install --cask font-open-sans font-noto-sans)")
+    raise RuntimeError(
+        f"none of the style's fonts {list(stack)} is installed "
+        "(e.g. brew install --cask font-open-sans font-noto-sans)"
+    )
+
 
 # ----------------------------------------------------------------------------
 # Colours
 # ----------------------------------------------------------------------------
+
 
 def parse_color(c):
     """CSS colour string (hsl/hsla/rgb/rgba/#hex/name) -> RGBA tuple in 0..1."""
@@ -139,7 +165,11 @@ def parse_color(c):
         parts = [p.strip() for p in m.group(2).split(",")]
         a = float(parts[3]) if len(parts) > 3 else 1.0
         if m.group(1).startswith("hsl"):
-            h, s, l = float(parts[0]) / 360, float(parts[1].rstrip("%")) / 100, float(parts[2].rstrip("%")) / 100
+            h, s, l = (
+                float(parts[0]) / 360,
+                float(parts[1].rstrip("%")) / 100,
+                float(parts[2].rstrip("%")) / 100,
+            )
             r, g, b = colorsys.hls_to_rgb(h, l, s)
         else:
             r, g, b = (float(p) / 255 for p in parts[:3])
@@ -148,11 +178,15 @@ def parse_color(c):
 
 
 def is_color(v):
-    return isinstance(v, str) and (v.startswith(("hsl", "rgb", "#")) or v in ("white", "black", "transparent"))
+    return isinstance(v, str) and (
+        v.startswith(("hsl", "rgb", "#")) or v in ("white", "black", "transparent")
+    )
+
 
 # ----------------------------------------------------------------------------
 # Style expressions (MapLibre style spec)
 # ----------------------------------------------------------------------------
+
 
 def interp(a, b, t):
     if isinstance(a, (int, float)) and isinstance(b, (int, float)):
@@ -171,7 +205,11 @@ def interp_stops(stops, x, base=1.0):
         if x0 <= x <= x1:
             if x1 == x0:
                 return v1
-            t = (x - x0) / (x1 - x0) if base == 1 else (base ** (x - x0) - 1) / (base ** (x1 - x0) - 1)
+            t = (
+                (x - x0) / (x1 - x0)
+                if base == 1
+                else (base ** (x - x0) - 1) / (base ** (x1 - x0) - 1)
+            )
             return interp(v0, v1, t)
     return stops[-1][1]
 
@@ -185,8 +223,12 @@ def evaluate(v, z, props):
         if v.get("type") == "categorical" or not isinstance(x, (int, float)):
             return next((val for key, val in v["stops"] if key == x), v.get("default"))
         first = v["stops"][0][1]
-        if v.get("type") == "interval" or (isinstance(first, str) and not is_color(first)) or isinstance(first, list):
-            out = first   # step function (strings that aren't colours, arrays)
+        if (
+            v.get("type") == "interval"
+            or (isinstance(first, str) and not is_color(first))
+            or isinstance(first, list)
+        ):
+            out = first  # step function (strings that aren't colours, arrays)
             for key, val in v["stops"]:
                 if x >= key:
                     out = val
@@ -194,11 +236,35 @@ def evaluate(v, z, props):
         return interp_stops(v["stops"], x, v.get("base", 1))
     if isinstance(v, list) and v and v[0] in EXPRESSION_OPS:
         return expr(v, z, props)
-    return v   # constants, incl. plain arrays such as text-font stacks and dash arrays
+    return v  # constants, incl. plain arrays such as text-font stacks and dash arrays
 
 
-EXPRESSION_OPS = {"get", "has", "zoom", "literal", "coalesce", "image", "to-string", "string", "to-number", "concat", "match",
-                  "case", "step", "interpolate", "==", "!=", "<", "<=", ">", ">=", "all", "any", "!", "in"}
+EXPRESSION_OPS = {
+    "get",
+    "has",
+    "zoom",
+    "literal",
+    "coalesce",
+    "image",
+    "to-string",
+    "string",
+    "to-number",
+    "concat",
+    "match",
+    "case",
+    "step",
+    "interpolate",
+    "==",
+    "!=",
+    "<",
+    "<=",
+    ">",
+    ">=",
+    "all",
+    "any",
+    "!",
+    "in",
+}
 
 
 def expr(e, z, props):
@@ -214,13 +280,15 @@ def expr(e, z, props):
         return args[0]
     if op == "coalesce":
         return next((x for x in map(ev, args) if x not in (None, "")), None)
-    if op == "image":   # an image is available only if the style has that icon
+    if op == "image":  # an image is available only if the style has that icon
         name = ev(args[0])
         return name if has_icon(name) else None
     if op in ("to-string", "string"):
         x = ev(args[0])
         return "" if x is None else str(x)
-    if op == "to-number":   # first argument convertible to a number, as in the style spec
+    if (
+        op == "to-number"
+    ):  # first argument convertible to a number, as in the style spec
         for a in args:
             try:
                 return float(ev(a))
@@ -295,8 +363,12 @@ def matches(f, z, props):
         return not any(matches(a, z, props) for a in args)
     if op == "!":
         return not matches(args[0], z, props)
-    if args and isinstance(args[0], str) and op in ("==", "!=", "<", "<=", ">", ">=", "in", "!in", "has", "!has"):
-        key = args[0]                                   # legacy filter
+    if (
+        args
+        and isinstance(args[0], str)
+        and op in ("==", "!=", "<", "<=", ">", ">=", "in", "!in", "has", "!has")
+    ):
+        key = args[0]  # legacy filter
         val = props.get(key)
         if op == "has":
             return key in props
@@ -309,20 +381,40 @@ def matches(f, z, props):
         return compare(op, val, args[1])
     return bool(expr(f, z, props))
 
+
 # ----------------------------------------------------------------------------
 # Rendering
 # ----------------------------------------------------------------------------
 
-GEOM_TYPE = {"Point": "Point", "MultiPoint": "Point", "LineString": "LineString",
-             "MultiLineString": "LineString", "Polygon": "Polygon", "MultiPolygon": "Polygon"}
+GEOM_TYPE = {
+    "Point": "Point",
+    "MultiPoint": "Point",
+    "LineString": "LineString",
+    "MultiLineString": "LineString",
+    "Polygon": "Polygon",
+    "MultiPolygon": "Polygon",
+}
 CAPS = {"butt": "butt", "round": "round", "square": "projecting"}
 JOINS = {"miter": "miter", "round": "round", "bevel": "bevel"}
 # property defaults from the MapLibre style spec, used when a rule doesn't set the property
-SPEC_DEFAULTS = {"fill-color": "#000000", "line-color": "#000000",
-                 "fill-opacity": 1, "line-opacity": 1, "line-width": 1, "icon-opacity": 1, "text-opacity": 1,
-                 "text-color": "#000000", "text-halo-width": 0, "icon-size": 1, "icon-rotate": 0,
-                 "symbol-spacing": 250, "text-size": 16, "line-cap": "butt", "line-join": "miter",
-                 "text-font": ["Open Sans Regular", "Arial Unicode MS Regular"]}
+SPEC_DEFAULTS = {
+    "fill-color": "#000000",
+    "line-color": "#000000",
+    "fill-opacity": 1,
+    "line-opacity": 1,
+    "line-width": 1,
+    "icon-opacity": 1,
+    "text-opacity": 1,
+    "text-color": "#000000",
+    "text-halo-width": 0,
+    "icon-size": 1,
+    "icon-rotate": 0,
+    "symbol-spacing": 250,
+    "text-size": 16,
+    "line-cap": "butt",
+    "line-join": "miter",
+    "text-font": ["Open Sans Regular", "Arial Unicode MS Regular"],
+}
 
 
 def rgba(value, opacity=1.0):
@@ -332,7 +424,11 @@ def rgba(value, opacity=1.0):
 
 def tokens(v, props):
     """Replace {key} placeholders (text-field, icon-image) with feature properties."""
-    return re.sub(r"\{([^}]+)\}", lambda m: str(props.get(m.group(1), "")), v).strip() if isinstance(v, str) else v
+    return (
+        re.sub(r"\{([^}]+)\}", lambda m: str(props.get(m.group(1), "")), v).strip()
+        if isinstance(v, str)
+        else v
+    )
 
 
 def render(path, out, zoom=None, scale=1, style_dir=STYLE_DIR):
@@ -367,9 +463,25 @@ def render(path, out, zoom=None, scale=1, style_dir=STYLE_DIR):
     def place_text(x, y, text, size, font, color, halo_color, halo_w, rot=0):
         if not text or not (0 <= x <= W and 0 <= y <= H):
             return
-        effects = [pe.withStroke(linewidth=2 * halo_w * S * pt, foreground=halo_color)] if halo_w else None
-        t = ax.text(x, y, text, fontsize=size * S * pt, fontproperties=font, color=color, ha="center",
-                    va="center", rotation=rot, path_effects=effects, zorder=1000, clip_on=True)
+        effects = (
+            [pe.withStroke(linewidth=2 * halo_w * S * pt, foreground=halo_color)]
+            if halo_w
+            else None
+        )
+        t = ax.text(
+            x,
+            y,
+            text,
+            fontsize=size * S * pt,
+            fontproperties=font,
+            color=color,
+            ha="center",
+            va="center",
+            rotation=rot,
+            path_effects=effects,
+            zorder=1000,
+            clip_on=True,
+        )
         bb = t.get_window_extent(renderer).expanded(1.05, 1.15)
         if any(bb.overlaps(o) for o in placed):
             t.remove()
@@ -378,8 +490,13 @@ def render(path, out, zoom=None, scale=1, style_dir=STYLE_DIR):
 
     def draw_icon(img, x, y, opacity=1.0, deg=0.0, zorder=900):
         h, w = img.shape[:2]
-        im = ax.imshow(img, extent=(x - w / 2, x + w / 2, y + h / 2, y - h / 2), alpha=opacity,
-                       zorder=zorder, interpolation="bilinear")
+        im = ax.imshow(
+            img,
+            extent=(x - w / 2, x + w / 2, y + h / 2, y - h / 2),
+            alpha=opacity,
+            zorder=zorder,
+            interpolation="bilinear",
+        )
         if deg:
             im.set_transform(Affine2D().rotate_deg_around(x, y, deg) + ax.transData)
 
@@ -391,7 +508,9 @@ def render(path, out, zoom=None, scale=1, style_dir=STYLE_DIR):
                 seg = math.hypot(bx - ax_, by - ay)
                 while dist <= seg and seg > 0:
                     t = dist / seg
-                    yield ax_ + (bx - ax_) * t, ay + (by - ay) * t, math.atan2(by - ay, bx - ax_)
+                    yield ax_ + (bx - ax_) * t, ay + (by - ay) * t, math.atan2(
+                        by - ay, bx - ax_
+                    )
                     dist += spacing
                 dist -= seg
 
@@ -413,17 +532,32 @@ def render(path, out, zoom=None, scale=1, style_dir=STYLE_DIR):
                 if p is None:
                     continue
                 pattern = P("fill-pattern")
-                if pattern:   # the style's SVG pattern, tiled and clipped to the polygon
-                    im = ax.imshow(pattern_canvas(pattern, S, int(W), int(H)), extent=(0, W, H, 0),
-                                   alpha=P("fill-opacity"), zorder=zorder, interpolation="nearest")
+                if pattern:  # the style's SVG pattern, tiled and clipped to the polygon
+                    im = ax.imshow(
+                        pattern_canvas(pattern, S, int(W), int(H)),
+                        extent=(0, W, H, 0),
+                        alpha=P("fill-opacity"),
+                        zorder=zorder,
+                        interpolation="nearest",
+                    )
                     im.set_clip_path(PathPatch(p, transform=ax.transData))
                     continue
-                if "fill-pattern" in paint:   # pattern rule with no pattern for this feature
+                if (
+                    "fill-pattern" in paint
+                ):  # pattern rule with no pattern for this feature
                     continue
                 outline = P("fill-outline-color")
-                ax.add_patch(PathPatch(p, facecolor=rgba(P("fill-color"), P("fill-opacity")),
-                                       edgecolor=rgba(outline, P("fill-opacity")) if outline else "none",
-                                       lw=0.5 * S * pt if outline else 0, zorder=zorder))
+                ax.add_patch(
+                    PathPatch(
+                        p,
+                        facecolor=rgba(P("fill-color"), P("fill-opacity")),
+                        edgecolor=(
+                            rgba(outline, P("fill-opacity")) if outline else "none"
+                        ),
+                        lw=0.5 * S * pt if outline else 0,
+                        zorder=zorder,
+                    )
+                )
 
             elif rule["type"] == "line" and gtype in ("LineString", "Polygon"):
                 p = rc.lines_path(rc.line_parts(geom, proj))
@@ -432,26 +566,54 @@ def render(path, out, zoom=None, scale=1, style_dir=STYLE_DIR):
                     continue
                 dash = P("line-dasharray")
                 ls = (0, tuple(max(d, 0.01) for d in dash)) if dash else "solid"
-                ax.add_patch(PathPatch(p, facecolor="none", edgecolor=rgba(P("line-color"), P("line-opacity")),
-                                       lw=width * S * pt, linestyle=ls, capstyle=CAPS[L("line-cap")],
-                                       joinstyle=JOINS[L("line-join")], zorder=zorder))
+                ax.add_patch(
+                    PathPatch(
+                        p,
+                        facecolor="none",
+                        edgecolor=rgba(P("line-color"), P("line-opacity")),
+                        lw=width * S * pt,
+                        linestyle=ls,
+                        capstyle=CAPS[L("line-cap")],
+                        joinstyle=JOINS[L("line-join")],
+                        zorder=zorder,
+                    )
+                )
 
             elif rule["type"] == "symbol":
                 icon = tokens(L("icon-image"), props)
                 icon_drawn = False
-                shield = None   # line icon with a label (road shields): drawn once, under the label
+                shield = None  # line icon with a label (road shields): drawn once, under the label
                 if has_icon(icon):
                     img = icon_image(icon, S * L("icon-size"))
                     if L("symbol-placement") == "line" and gtype == "LineString":
                         if "text-field" in layout:
                             shield = img
-                        else:   # icon repeated along the line, e.g. one-way arrows
-                            for x, y, ang in along_line(rc.line_parts(geom, proj), L("symbol-spacing") * S):
-                                draw_icon(img, x, y, P("icon-opacity"), math.degrees(ang) + L("icon-rotate"))
+                        else:  # icon repeated along the line, e.g. one-way arrows
+                            for x, y, ang in along_line(
+                                rc.line_parts(geom, proj), L("symbol-spacing") * S
+                            ):
+                                draw_icon(
+                                    img,
+                                    x,
+                                    y,
+                                    P("icon-opacity"),
+                                    math.degrees(ang) + L("icon-rotate"),
+                                )
                     elif gtype == "Point":
-                        (ix, iy), = proj.pts([geom["coordinates"]] if geom["type"] == "Point" else geom["coordinates"][:1])
+                        ((ix, iy),) = proj.pts(
+                            [geom["coordinates"]]
+                            if geom["type"] == "Point"
+                            else geom["coordinates"][:1]
+                        )
                         if 0 <= ix <= W and 0 <= iy <= H:
-                            draw_icon(img, ix, iy, P("icon-opacity"), L("icon-rotate"), zorder=950)
+                            draw_icon(
+                                img,
+                                ix,
+                                iy,
+                                P("icon-opacity"),
+                                L("icon-rotate"),
+                                zorder=950,
+                            )
                             icon_drawn = True
                 if "text-field" not in layout:
                     continue
@@ -463,11 +625,17 @@ def render(path, out, zoom=None, scale=1, style_dir=STYLE_DIR):
                 size, font = L("text-size"), font_props(tuple(L("text-font")))
                 color = rgba(P("text-color"), P("text-opacity"))
                 halo = P("text-halo-color")
-                halo_w, halo_rgba = (P("text-halo-width"), rgba(halo)) if halo else (0, None)
+                halo_w, halo_rgba = (
+                    (P("text-halo-width"), rgba(halo)) if halo else (0, None)
+                )
                 if gtype == "Point":
-                    (x, y), = proj.pts([geom["coordinates"]] if geom["type"] == "Point" else geom["coordinates"][:1])
+                    ((x, y),) = proj.pts(
+                        [geom["coordinates"]]
+                        if geom["type"] == "Point"
+                        else geom["coordinates"][:1]
+                    )
                     offset = L("text-offset")
-                    if icon_drawn and offset:   # text-offset is in ems
+                    if icon_drawn and offset:  # text-offset is in ems
                         x, y = x + offset[0] * size * S, y + offset[1] * size * S
                     place_text(x, y, text, size, font, color, halo_rgba, halo_w)
                 else:  # line placement: middle of the longest part, along the line
@@ -476,16 +644,24 @@ def render(path, out, zoom=None, scale=1, style_dir=STYLE_DIR):
                     if len(best) >= 2:
                         a, b = best[len(best) // 2 - 1], best[len(best) // 2]
                         mx, my = (a[0] + b[0]) / 2, (a[1] + b[1]) / 2
-                        if shield is not None:   # shields stay upright, label centred on them
+                        if (
+                            shield is not None
+                        ):  # shields stay upright, label centred on them
                             if 0 <= mx <= W and 0 <= my <= H:
                                 draw_icon(shield, mx, my, P("icon-opacity"), zorder=990)
-                            place_text(mx, my, text, size, font, color, halo_rgba, halo_w)
+                            place_text(
+                                mx, my, text, size, font, color, halo_rgba, halo_w
+                            )
                             continue
                         ang = -math.degrees(math.atan2(b[1] - a[1], b[0] - a[0]))
                         ang = ang - 180 if ang > 90 else ang + 180 if ang < -90 else ang
-                        place_text(mx, my, text, size, font, color, halo_rgba, halo_w, ang)
+                        place_text(
+                            mx, my, text, size, font, color, halo_rgba, halo_w, ang
+                        )
 
-    ax.set_xlim(0, W)   # imshow (patterns/icons) can reset the view; restore the pixel window
+    ax.set_xlim(
+        0, W
+    )  # imshow (patterns/icons) can reset the view; restore the pixel window
     ax.set_ylim(H, 0)
     ax.set_aspect("auto")
     fig.savefig(out, dpi=100, facecolor=bg)
@@ -501,6 +677,9 @@ if __name__ == "__main__":
     ap.add_argument("-o", "--out")
     a = ap.parse_args()
     base = os.path.basename(a.geojson).split(".")[0]
-    out = a.out or f"{base}_omt_z{a.zoom or 'src'}{'@%dx' % a.scale if a.scale > 1 else ''}.png"
+    out = (
+        a.out
+        or f"{base}_omt_z{a.zoom or 'src'}{'@%dx' % a.scale if a.scale > 1 else ''}.png"
+    )
     info = render(a.geojson, out, a.zoom, a.scale)
     print(out, json.dumps(info))

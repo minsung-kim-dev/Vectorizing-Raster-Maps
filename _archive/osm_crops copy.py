@@ -42,6 +42,7 @@ boxes.csv (WGS84 lon/lat; the zoom column is optional and overrides --zoom):
   name,min_lon,min_lat,max_lon,max_lat,zoom
   harbor,7.4180,43.7300,7.4300,43.7380,17
 """
+
 import argparse
 import math
 import os
@@ -61,7 +62,7 @@ ORIGIN = math.pi * 6378137.0  # half the Web Mercator world width in metres
 # ---------------------------------------------------------------- tile-grid maths
 def lonlat_to_px(lon, lat, z):
     """Global pixel coordinates at zoom z (256px tiles), same as render_carto.py."""
-    n = 256 * 2 ** z
+    n = 256 * 2**z
     x = (lon + 180.0) / 360.0 * n
     lat = max(min(lat, 85.05112878), -85.05112878)
     s = math.sin(math.radians(lat))
@@ -79,7 +80,7 @@ def pixel_window(bbox, z):
 def window_to_3857(window, z):
     """Exact EPSG:3857 extent (minx, miny, maxx, maxy) of a pixel window."""
     x0, y0, x1, y1 = window
-    res = 2 * ORIGIN / (256 * 2 ** z)  # metres per pixel at zoom z
+    res = 2 * ORIGIN / (256 * 2**z)  # metres per pixel at zoom z
     return x0 * res - ORIGIN, ORIGIN - y1 * res, x1 * res - ORIGIN, ORIGIN - y0 * res
 
 
@@ -107,28 +108,40 @@ def download(url: str, dest: Path) -> None:
 
 
 # ---------------------------------------------------------------- step 2
-def import_db(pbf: Path, carto: Path, db: str, workdir: Path, clip, extra_args,
-              reimport: bool) -> None:
+def import_db(
+    pbf: Path, carto: Path, db: str, workdir: Path, clip, extra_args, reimport: bool
+) -> None:
     marker = workdir / f"imported_{db}.txt"
     stamp = f"{pbf.resolve()}\n{clip}\n"
     if marker.exists() and not reimport:
         if marker.read_text() != stamp:
-            print(f"[warn] database '{db}' was imported from different data "
-                  f"({marker.read_text().splitlines()[0]}); use --reimport to replace it")
+            print(
+                f"[warn] database '{db}' was imported from different data "
+                f"({marker.read_text().splitlines()[0]}); use --reimport to replace it"
+            )
         else:
             print(f"[skip] {pbf.name} already imported into '{db}'")
         return
 
     need("osm2pgsql", "Install osm2pgsql (e.g. apt install osm2pgsql).")
     need("psql", "Install the PostgreSQL client tools.")
-    print(f"[import] {pbf.name} -> PostGIS database '{db}' (one-time, can take a while)")
+    print(
+        f"[import] {pbf.name} -> PostGIS database '{db}' (one-time, can take a while)"
+    )
 
     flex = carto / "openstreetmap-carto-flex.lua"
     if flex.exists():  # openstreetmap-carto v5.9+
         cmd = ["osm2pgsql", "-O", "flex", "-S", flex]
     else:  # older releases use the pgsql output with a tag-transform script
-        cmd = ["osm2pgsql", "-G", "--hstore", "--style", carto / "openstreetmap-carto.style",
-               "--tag-transform-script", carto / "openstreetmap-carto.lua"]
+        cmd = [
+            "osm2pgsql",
+            "-G",
+            "--hstore",
+            "--style",
+            carto / "openstreetmap-carto.style",
+            "--tag-transform-script",
+            carto / "openstreetmap-carto.lua",
+        ]
     if clip:
         cmd += ["--bbox", ",".join(map(str, clip))]
     cmd += ["-d", db, *extra_args, pbf]
@@ -139,7 +152,10 @@ def import_db(pbf: Path, carto: Path, db: str, workdir: Path, clip, extra_args,
             run(["psql", "-v", "ON_ERROR_STOP=1", "-d", db, "-f", carto / sql])
 
     # land/sea polygons, Antarctic ice etc.; Carto loads these into the database
-    run([sys.executable, carto / "scripts" / "get-external-data.py", "-d", db], cwd=carto)
+    run(
+        [sys.executable, carto / "scripts" / "get-external-data.py", "-d", db],
+        cwd=carto,
+    )
     marker.write_text(stamp)
 
 
@@ -153,11 +169,15 @@ def build_style(carto: Path, db: str, workdir: Path) -> Path:
         return xml
     need("carto", "Install the CartoCSS compiler: npm install -g carto")
     print(f"[style] compiling {mml} -> {xml.name}")
-    out = subprocess.run(["carto", str(mml)], cwd=carto, check=True,
-                         capture_output=True, text=True).stdout
+    out = subprocess.run(
+        ["carto", str(mml)], cwd=carto, check=True, capture_output=True, text=True
+    ).stdout
     # point every PostGIS layer at our database (project.mml defaults to "gis")
-    out, n = re.subn(r'(<Parameter name="dbname">)(?:<!\[CDATA\[)?[^<\]]*(?:\]\]>)?(</Parameter>)',
-                     rf"\g<1><![CDATA[{db}]]>\g<2>", out)
+    out, n = re.subn(
+        r'(<Parameter name="dbname">)(?:<!\[CDATA\[)?[^<\]]*(?:\]\]>)?(</Parameter>)',
+        rf"\g<1><![CDATA[{db}]]>\g<2>",
+        out,
+    )
     if n == 0:
         print("[warn] no dbname parameters found in the compiled style")
     xml.write_text(out)
@@ -171,6 +191,7 @@ _MAP = None  # one Mapnik map per worker process
 def init_worker(xml_path, carto_dir):
     global _MAP
     import mapnik
+
     fonts = Path(carto_dir) / "fonts"
     if fonts.is_dir():
         mapnik.register_fonts(str(fonts))
@@ -182,15 +203,20 @@ def init_worker(xml_path, carto_dir):
 
 def render(name, bbox, zoom, scale, out_dir, fmt, max_px):
     import mapnik
+
     window = pixel_window(bbox, zoom)
     w = (window[2] - window[0]) * scale
     h = (window[3] - window[1]) * scale
     if max(w, h) > max_px:
-        raise ValueError(f"{w}x{h} px exceeds --max-px {max_px}; lower the zoom or raise the cap")
+        raise ValueError(
+            f"{w}x{h} px exceeds --max-px {max_px}; lower the zoom or raise the cap"
+        )
     _MAP.resize(w, h)
     _MAP.zoom_to_box(mapnik.Box2d(*window_to_3857(window, zoom)))
     im = mapnik.Image(w, h)
-    mapnik.render(_MAP, im, float(scale))  # scale_factor keeps Carto's zoom-based styling
+    mapnik.render(
+        _MAP, im, float(scale)
+    )  # scale_factor keeps Carto's zoom-based styling
     path = Path(out_dir) / f"{name}.{fmt}"
     im.save(str(path), "jpeg92" if fmt == "jpg" else "png")
     return path, w, h, window
@@ -199,61 +225,118 @@ def render(name, bbox, zoom, scale, out_dir, fmt, max_px):
 def render_job(job):
     """Worker wrapper: one failed crop shouldn't stop a run of thousands."""
     name, bbox, zoom, kw = job
-    row = dict(name=name, zoom=zoom, min_lon=bbox[0], min_lat=bbox[1],
-               max_lon=bbox[2], max_lat=bbox[3])
+    row = dict(
+        name=name,
+        zoom=zoom,
+        min_lon=bbox[0],
+        min_lat=bbox[1],
+        max_lon=bbox[2],
+        max_lat=bbox[3],
+    )
     try:
         path, w, h, win = render(name, bbox, zoom, **kw)
-        return dict(row, file=path.name, width=w, height=h, error="",
-                    px_x0=win[0], px_y0=win[1], px_x1=win[2], px_y1=win[3])
+        return dict(
+            row,
+            file=path.name,
+            width=w,
+            height=h,
+            error="",
+            px_x0=win[0],
+            px_y0=win[1],
+            px_x1=win[2],
+            px_y1=win[3],
+        )
     except Exception as e:  # noqa: BLE001
         return dict(row, file="", width=0, height=0, error=repr(e))
 
 
 # ---------------------------------------------------------------- main
 def main():
-    p = argparse.ArgumentParser(description=__doc__,
-                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     src = p.add_mutually_exclusive_group(required=True)
     src.add_argument("--pbf-url", help="URL of a .osm.pbf extract (e.g. Geofabrik)")
     src.add_argument("--pbf", type=Path, help="local .osm.pbf file")
-    p.add_argument("--carto-dir", type=Path, required=True,
-                   help="checkout of https://github.com/gravitystorm/openstreetmap-carto")
-    p.add_argument("--boxes", type=Path, required=True,
-                   help="CSV with name,min_lon,min_lat,max_lon,max_lat[,zoom]")
-    p.add_argument("--zoom", type=int, default=16,
-                   help="OSM zoom level to render at (default 16); a 'zoom' column in "
-                        "the CSV overrides it per box")
-    p.add_argument("--scale", type=int, choices=[1, 2, 3, 4], default=1,
-                   help="high-DPI factor: 2 = twice the pixels with the same map content")
-    p.add_argument("--dbname", default="gis", help="PostGIS database name (default gis)")
+    p.add_argument(
+        "--carto-dir",
+        type=Path,
+        required=True,
+        help="checkout of https://github.com/gravitystorm/openstreetmap-carto",
+    )
+    p.add_argument(
+        "--boxes",
+        type=Path,
+        required=True,
+        help="CSV with name,min_lon,min_lat,max_lon,max_lat[,zoom]",
+    )
+    p.add_argument(
+        "--zoom",
+        type=int,
+        default=16,
+        help="OSM zoom level to render at (default 16); a 'zoom' column in "
+        "the CSV overrides it per box",
+    )
+    p.add_argument(
+        "--scale",
+        type=int,
+        choices=[1, 2, 3, 4],
+        default=1,
+        help="high-DPI factor: 2 = twice the pixels with the same map content",
+    )
+    p.add_argument(
+        "--dbname", default="gis", help="PostGIS database name (default gis)"
+    )
     p.add_argument("--out", type=Path, default=Path("crops"))
     p.add_argument("--workdir", type=Path, default=Path("osm_data"))
-    p.add_argument("--max-px", type=int, default=12000,
-                   help="cap on either image dimension")
+    p.add_argument(
+        "--max-px", type=int, default=12000, help="cap on either image dimension"
+    )
     p.add_argument("--format", choices=["png", "jpg"], default="png")
-    p.add_argument("--region-bbox", type=float, nargs=4,
-                   metavar=("MIN_LON", "MIN_LAT", "MAX_LON", "MAX_LAT"),
-                   help="only import data inside this box (saves time/disk)")
-    p.add_argument("--osm2pgsql-args", default="",
-                   help='extra osm2pgsql options, e.g. "--cache 4000 --number-processes 4"')
-    p.add_argument("--reimport", action="store_true",
-                   help="re-run the database import even if it was done before")
-    p.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 1),
-                   help="parallel render processes")
-    p.add_argument("--overwrite", action="store_true",
-                   help="re-render images that already exist (default: skip them)")
+    p.add_argument(
+        "--region-bbox",
+        type=float,
+        nargs=4,
+        metavar=("MIN_LON", "MIN_LAT", "MAX_LON", "MAX_LAT"),
+        help="only import data inside this box (saves time/disk)",
+    )
+    p.add_argument(
+        "--osm2pgsql-args",
+        default="",
+        help='extra osm2pgsql options, e.g. "--cache 4000 --number-processes 4"',
+    )
+    p.add_argument(
+        "--reimport",
+        action="store_true",
+        help="re-run the database import even if it was done before",
+    )
+    p.add_argument(
+        "--workers",
+        type=int,
+        default=max(1, (os.cpu_count() or 2) - 1),
+        help="parallel render processes",
+    )
+    p.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="re-render images that already exist (default: skip them)",
+    )
     a = p.parse_args()
 
     carto = a.carto_dir.resolve()
     if not (carto / "project.mml").exists():
         sys.exit(f"[error] {carto} doesn't look like an openstreetmap-carto checkout")
     if not (carto / "fonts").is_dir():
-        print("[warn] no fonts/ folder in the Carto checkout; run scripts/get-fonts.sh "
-              "there or labels may be missing")
+        print(
+            "[warn] no fonts/ folder in the Carto checkout; run scripts/get-fonts.sh "
+            "there or labels may be missing"
+        )
     try:
         import mapnik  # noqa: F401
     except ImportError:
-        sys.exit("[error] Python Mapnik bindings not found (e.g. apt install python3-mapnik)")
+        sys.exit(
+            "[error] Python Mapnik bindings not found (e.g. apt install python3-mapnik)"
+        )
 
     a.workdir.mkdir(parents=True, exist_ok=True)
     a.out.mkdir(parents=True, exist_ok=True)
@@ -263,8 +346,15 @@ def main():
         download(a.pbf_url, pbf)
     else:
         pbf = a.pbf
-    import_db(pbf, carto, a.dbname, a.workdir, a.region_bbox,
-              a.osm2pgsql_args.split(), a.reimport)
+    import_db(
+        pbf,
+        carto,
+        a.dbname,
+        a.workdir,
+        a.region_bbox,
+        a.osm2pgsql_args.split(),
+        a.reimport,
+    )
     xml = build_style(carto, a.dbname, a.workdir.resolve())
 
     kw = dict(scale=a.scale, out_dir=str(a.out), fmt=a.format, max_px=a.max_px)
@@ -290,8 +380,11 @@ def main():
 
     results = []
     if jobs:
-        with ProcessPoolExecutor(max_workers=a.workers, initializer=init_worker,
-                                 initargs=(str(xml), str(carto))) as pool:
+        with ProcessPoolExecutor(
+            max_workers=a.workers,
+            initializer=init_worker,
+            initargs=(str(xml), str(carto)),
+        ) as pool:
             futures = [pool.submit(render_job, j) for j in jobs]
             for n, fut in enumerate(as_completed(futures), 1):
                 r = fut.result()
@@ -308,8 +401,10 @@ def main():
     if not new.empty:
         new.to_csv(index_path, index=False)
     errors = sum(1 for r in results if r["error"])
-    print(f"done: {len(results) - errors} rendered, {errors} failed, "
-          f"{skipped} skipped -> {a.out}/")
+    print(
+        f"done: {len(results) - errors} rendered, {errors} failed, "
+        f"{skipped} skipped -> {a.out}/"
+    )
 
 
 if __name__ == "__main__":

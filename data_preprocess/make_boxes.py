@@ -13,6 +13,7 @@ Usage:
   python make_boxes.py --n 2400 --min-m 125 --max-m 125 --boroughs queens --test-frac 0.0834 --test-nta flushing --out boxes.csv
       (200 boxes named flushing_* inside the "flushing" NTAs, the rest in Queens away from them)
 """
+
 import argparse
 import math
 import os
@@ -24,23 +25,44 @@ import geopandas as gpd
 import shapely
 from shapely.geometry import Point, Polygon, box
 
-NTA_URL = ("https://services5.arcgis.com/GfwWNkhOj9bNBqoJ/arcgis/rest/services/NYC_Neighborhood_Tabulation_Areas_2020/"
-           "FeatureServer/0/query?where=1=1&outFields=*&outSR=4326&f=pgeojson")
+NTA_URL = (
+    "https://services5.arcgis.com/GfwWNkhOj9bNBqoJ/arcgis/rest/services/NYC_Neighborhood_Tabulation_Areas_2020/"
+    "FeatureServer/0/query?where=1=1&outFields=*&outSR=4326&f=pgeojson"
+)
 
 # alternative, pull from NYC DCP URL
-BORO_URL = ("https://services1.arcgis.com/oOUgp466Coyjcu6V/ArcGIS/rest/services/NYC_Borough/FeatureServer/"
-            "0/query?where=1=1&outFields=*&outSR=4326&f=pgeojson")
+BORO_URL = (
+    "https://services1.arcgis.com/oOUgp466Coyjcu6V/ArcGIS/rest/services/NYC_Borough/FeatureServer/"
+    "0/query?where=1=1&outFields=*&outSR=4326&f=pgeojson"
+)
 BOROUGHS = {  # rough (lon, lat) outlines
-    "queens": [(-73.958, 40.745), (-73.935, 40.778), (-73.905, 40.783), (-73.860, 40.768),
-               (-73.830, 40.785), (-73.780, 40.792), (-73.765, 40.770), (-73.701, 40.750),
-               (-73.725, 40.655), (-73.760, 40.625), (-73.790, 40.640), (-73.830, 40.650),
-               (-73.856, 40.650), (-73.868, 40.695), (-73.903, 40.695), (-73.925, 40.730)],
+    "queens": [
+        (-73.958, 40.745),
+        (-73.935, 40.778),
+        (-73.905, 40.783),
+        (-73.860, 40.768),
+        (-73.830, 40.785),
+        (-73.780, 40.792),
+        (-73.765, 40.770),
+        (-73.701, 40.750),
+        (-73.725, 40.655),
+        (-73.760, 40.625),
+        (-73.790, 40.640),
+        (-73.830, 40.650),
+        (-73.856, 40.650),
+        (-73.868, 40.695),
+        (-73.903, 40.695),
+        (-73.925, 40.730),
+    ],
 }
+
 
 def plot_boroughs(out="boroughs_check.png"):
     """Cross-check rough lon/lat coordiantes with the official borough bounadries from the city."""
     ax = gpd.read_file(BORO_URL).boundary.plot(color="grey", figsize=(8, 8))
-    gpd.GeoSeries([Polygon(v) for v in BOROUGHS.values()]).boundary.plot(ax=ax, color="red")
+    gpd.GeoSeries([Polygon(v) for v in BOROUGHS.values()]).boundary.plot(
+        ax=ax, color="red"
+    )
     ax.figure.savefig(out)
 
 
@@ -51,7 +73,9 @@ def load_nta(path):
     return gpd.read_file(path)
 
 
-def sample_boxes(rng, polys, n, min_m, max_m, land, max_overlap=0.5, start=0, avoid=None):
+def sample_boxes(
+    rng, polys, n, min_m, max_m, land, max_overlap=0.5, start=0, avoid=None
+):
     """n boxes (name, min_lon, min_lat, max_lon, max_lat, w_m, h_m) centred inside polys (area-weighted),
     skipping boxes that are less than half `land`, touch the geometry `avoid`, or share more than
     `max_overlap` of their area with an earlier box."""
@@ -60,7 +84,9 @@ def sample_boxes(rng, polys, n, min_m, max_m, land, max_overlap=0.5, start=0, av
     tries = 0
     while len(rows) < n:
         tries += 1
-        assert tries < 1000 * n, "boxes don't fit: lower --n / --test-frac or raise --max-overlap"
+        assert (
+            tries < 1000 * n
+        ), "boxes don't fit: lower --n / --test-frac or raise --max-overlap"
         boro = rng.choices(names, weights)[0]
         minx, miny, maxx, maxy = polys[boro].bounds
         lon, lat = rng.uniform(minx, maxx), rng.uniform(miny, maxy)
@@ -74,14 +100,29 @@ def sample_boxes(rng, polys, n, min_m, max_m, land, max_overlap=0.5, start=0, av
         dlat = h / 111_320 / 2
         dlon = w / (111_320 * math.cos(math.radians(lat))) / 2
         b = box(lon - dlon, lat - dlat, lon + dlon, lat + dlat)
-        if land.intersection(b).area < 0.5 * b.area or (avoid is not None and avoid.intersects(b)):
+        if land.intersection(b).area < 0.5 * b.area or (
+            avoid is not None and avoid.intersects(b)
+        ):
             continue
         # skip if an earlier box covers more than max_overlap of this one
-        if taken and shapely.area(shapely.intersection(taken, b)).max() > max_overlap * b.area:
+        if (
+            taken
+            and shapely.area(shapely.intersection(taken, b)).max()
+            > max_overlap * b.area
+        ):
             continue
         taken.append(b)
-        rows.append((f"{boro}_{start + len(rows) + 1:05d}", lon - dlon, lat - dlat,
-                     lon + dlon, lat + dlat, round(w), round(h)))
+        rows.append(
+            (
+                f"{boro}_{start + len(rows) + 1:05d}",
+                lon - dlon,
+                lat - dlat,
+                lon + dlon,
+                lat + dlat,
+                round(w),
+                round(h),
+            )
+        )
     return rows
 
 
@@ -92,16 +133,40 @@ def main():
     p.add_argument("--max-m", type=float, default=2500, help="largest box side, meters")
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--out", default="boxes.csv")
-    p.add_argument("--boroughs", nargs="+", default=list(BOROUGHS), choices=list(BOROUGHS))
-    p.add_argument("--test-frac", type=float, default=None,
-                   help="fraction of boxes in the held-out borough (e.g. 0.1); default: all boroughs area-weighted")
-    p.add_argument("--holdout", default="queens", choices=list(BOROUGHS), help="held-out borough for --test-frac")
-    p.add_argument("--test-nta", default=None,
-                   help="with --test-frac: hold out the NTAs whose name contains this text instead of a borough")
-    p.add_argument("--nta-file", default="data/nyc_nta_2020.geojson", help="NYC 2020 NTAs, for land and --test-nta (downloaded if missing)")
-    p.add_argument("--osm-file", default="osm_data/NewYork.gpkg", help="OSM GeoPackage, for water")
-    p.add_argument("--max-overlap", type=float, default=0.5,
-                   help="skip boxes sharing more than this fraction of their area with an earlier box (1 = no limit)")
+    p.add_argument(
+        "--boroughs", nargs="+", default=list(BOROUGHS), choices=list(BOROUGHS)
+    )
+    p.add_argument(
+        "--test-frac",
+        type=float,
+        default=None,
+        help="fraction of boxes in the held-out borough (e.g. 0.1); default: all boroughs area-weighted",
+    )
+    p.add_argument(
+        "--holdout",
+        default="queens",
+        choices=list(BOROUGHS),
+        help="held-out borough for --test-frac",
+    )
+    p.add_argument(
+        "--test-nta",
+        default=None,
+        help="with --test-frac: hold out the NTAs whose name contains this text instead of a borough",
+    )
+    p.add_argument(
+        "--nta-file",
+        default="data/nyc_nta_2020.geojson",
+        help="NYC 2020 NTAs, for land and --test-nta (downloaded if missing)",
+    )
+    p.add_argument(
+        "--osm-file", default="osm_data/NewYork.gpkg", help="OSM GeoPackage, for water"
+    )
+    p.add_argument(
+        "--max-overlap",
+        type=float,
+        default=0.5,
+        help="skip boxes sharing more than this fraction of their area with an earlier box (1 = no limit)",
+    )
     a = p.parse_args()
 
     rng = random.Random(a.seed)
@@ -117,17 +182,38 @@ def main():
             match = nta[nta.NTAName.str.contains(a.test_nta, case=False)]
             print("test NTAs:", ", ".join(match.NTAName))
             area = match.union_all()
-            rows = sample_boxes(rng, polys, a.n - n_test, a.min_m, a.max_m, land, a.max_overlap, avoid=area)
+            rows = sample_boxes(
+                rng,
+                polys,
+                a.n - n_test,
+                a.min_m,
+                a.max_m,
+                land,
+                a.max_overlap,
+                avoid=area,
+            )
             test = {a.test_nta.lower().replace(" ", "_"): area}
         else:
-            rows = sample_boxes(rng, {k: v for k, v in polys.items() if k != a.holdout}, a.n - n_test, a.min_m, a.max_m, land, a.max_overlap)
+            rows = sample_boxes(
+                rng,
+                {k: v for k, v in polys.items() if k != a.holdout},
+                a.n - n_test,
+                a.min_m,
+                a.max_m,
+                land,
+                a.max_overlap,
+            )
             test = {a.holdout: polys[a.holdout]}
-        rows += sample_boxes(rng, test, n_test, a.min_m, a.max_m, land, a.max_overlap, start=len(rows))
+        rows += sample_boxes(
+            rng, test, n_test, a.min_m, a.max_m, land, a.max_overlap, start=len(rows)
+        )
 
     with open(a.out, "w") as f:
         f.write("name,min_lon,min_lat,max_lon,max_lat,width_m,height_m\n")
         for r in rows:
-            f.write(f"{r[0]},{r[1]:.6f},{r[2]:.6f},{r[3]:.6f},{r[4]:.6f},{r[5]},{r[6]}\n")
+            f.write(
+                f"{r[0]},{r[1]:.6f},{r[2]:.6f},{r[3]:.6f},{r[4]:.6f},{r[5]},{r[6]}\n"
+            )
     print(f"wrote {len(rows)} boxes to {a.out}")
 
 

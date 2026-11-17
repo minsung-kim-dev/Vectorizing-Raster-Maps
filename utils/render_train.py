@@ -9,6 +9,7 @@ Usage:
 Already-rendered PNGs are skipped, so the script can be stopped and resumed.
 Per-map render info (zoom, pixel window, size) is written to <out>/renders.jsonl.
 """
+
 import argparse, json, os, sys
 from multiprocessing import Pool
 from pathlib import Path
@@ -41,7 +42,9 @@ def main():
     srcs = sorted(a.src.glob("*.geojson.gz"))[: a.limit]
     jobs = [(s, a.out / (s.name.split(".")[0] + ".png"), a.zoom, a.scale) for s in srcs]
     jobs = [j for j in jobs if not j[1].exists()]
-    print(f"{len(srcs)} maps, {len(srcs) - len(jobs)} already done, {len(jobs)} to render")
+    print(
+        f"{len(srcs)} maps, {len(srcs) - len(jobs)} already done, {len(jobs)} to render"
+    )
 
     errors = 0
     with Pool(a.workers) as pool, open(a.out / "renders.jsonl", "a") as log:
