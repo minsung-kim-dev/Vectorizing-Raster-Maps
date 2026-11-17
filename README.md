@@ -2,7 +2,7 @@
 
 Jennah Gosciak (jrg377), Minsung Kim (mk2797), Sunishka Sil (ss4469)
 
-The next few sections describe the setup of the repository and how to work with Google Cloud.
+The next few sections describe the setup of the repository and how to work with Google Cloud. Note: many of the methods in this repository rely on an updated version of a [forked Raster2Seq repository](https://github.com/jennahgosciak/Raster2Seq).
 
 Skip to the [Training](#training) section to understand how to train
 
@@ -161,3 +161,20 @@ Files in `_scratch` include ad-hoc work and additional testing. These should not
 
 
 ## Training
+
+Importantly, all training and evaluation functions call methods directly from Raster2Seq. Ensure you have the correct [forked repository](https://github.com/jennahgosciak/Raster2Seq).
+
+All training of the Raster2Seq models is done via bash scripts stored in `tools/`. Raster2Seq is trained in two stages: `train_*.sh` scripts implement the first stage of training while `finetune_*.sh` implement the second stage.
+
+1. `tools/train_osm.sh`: stage 1 for the modified Raster2Seq model, which learns shapes only (polygon vs. line).
+2. `tools/finetune_osm.sh`: stage 2, starts from stage 1 and learns the semantic labels along with an additional attention head.
+
+The color-threshold baseline does not need explicit training and can be found in the `baselines/` folder.
+
+## Evaluation
+
+- `predict_and_evaluate.sh` (stage 1) and `predict_and_evaluate_stage2.sh`: run the Raster2Seq `eval.py` on a checkpoint
+- `parallel_evaluation.sh`: same process as above, but splits the set of images into K parts to speed up evaluation. Evaluates images in in parallel and then combines them. Each part is weighted by the number of images in which it appears.
+- create_latex_table.py: turns the results into LaTeX tables that we can paste into the report.
+
+The color threshold baseline has its own evaluation script `eval_baseline.py)`.
