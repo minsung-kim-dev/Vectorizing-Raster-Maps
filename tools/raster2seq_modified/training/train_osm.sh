@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Raster2Seq training pipeline for the OSM crops, modelled on Raster2Seq's tools/train_cc5k.sh
+# Raster2Seq training pipeline for the OSM crops, modeled on Raster2Seq's tools/train_cc5k.sh
 # (stage 1, shapes only) and tools/finetune_cc5k.sh (stage 2, labels).
 #
-# Usage (in the raster2seq env):  bash tools/train_osm.sh
+# Usage (in the raster2seq env):  bash tools/raster2seq_modified/training/train_osm.sh
 set -euo pipefail
 
-REPO=$(cd "$(dirname "$0")/.." && pwd)
+REPO=$(cd "$(dirname "$0")/../../.." && pwd)
 R2S=${R2S:-$REPO/../Raster2Seq}
 CROPS=${CROPS:-$REPO/crops}
 DATA=${DATA:-$REPO/data/coco_osm_flushing}
@@ -50,7 +50,7 @@ cd "$R2S"
 
 mkdir -p wandb_keys && touch "wandb_keys/$(whoami)_wandb.key"  # main_ddp.py otherwise prompts for a wandb key
 PRETRAIN=$(python -c "from raster2seq_hub import download_checkpoint; print(download_checkpoint('cubicasa5k'))")
-PYTHONPATH=~/Vectorizing-Raster-Maps torchrun --nproc_per_node=${NUM_GPUS} --master_port=14159 main_ddp.py \
+torchrun --nproc_per_node=${NUM_GPUS} --master_port=14159 main_ddp.py \
     --dataset_name=osm \
     --dataset_root="$DATA" \
     --semantic_classes=3 \
