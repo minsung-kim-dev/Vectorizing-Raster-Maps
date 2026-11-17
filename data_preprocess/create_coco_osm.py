@@ -59,7 +59,7 @@ PARTS = {
 # Anything not listed (and not in SKIP) is labelled "unknown" / "unknown_line" (e.g. military areas / ferries).
 # Labels distinguish the original polygon and line categories. Buffered lines
 # keep their original labels even though their output geometry becomes a polygon.
-vocab_reviewed = pd.read_csv("label_colors_reviewed")
+vocab_reviewed = pd.read_csv(Path(__file__).parent / "label_colors_reviewed.csv")
 kept = vocab_reviewed[vocab_reviewed.final_label.notna()] 
 kept["class"] = np.where(kept["class"].notna(), kept["class"], None)  # building: NaN -> None
 kept["subclass"] = np.where(kept["subclass"].notna(), kept["subclass"], None)
