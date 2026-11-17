@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Predict + evaluate the latest checkpoint. Usage (raster2seq env): bash tools/predict_eval_osm.sh [job] [data] [split]
+# Predict + evaluate the latest checkpoint. Usage (raster2seq env): bash tools/raster2seq_modified/evaluation/predict_and_evaluate_stage2.sh [job] [data] [split]
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../../.."
 export PYTHONPATH=$PWD
 JOB=${1:-osm_stage2_queens_4000pretrain}
 DATA=${2:-data/coco_osm_flushing} SPLIT=${3:-val}
