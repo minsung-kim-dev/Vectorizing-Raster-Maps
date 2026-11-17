@@ -139,23 +139,13 @@ Options:
 - `--val_frac` – fraction of non-test crops used for val (default `0.1`)
 - `--min_area` – drop polygons smaller than this, in px² (default `20`)
 - `--simplify_tol` – shape simplification tolerance in px, `0` = off (default `1.0`)
-- `--seed` – random seed for the train/val split (default `0`)
 - `--line_buffer_px` – buffer radius in original PNG pixels for line features; must be positive (default: no buffering)
-- `--sample_name` – convert one paired crop by name, without the file extension; writes it to the test split
-- `--max_crops` – convert at most this many paired crops in filename order, before splitting (default `0` = all)
 
-Limiting crops before splitting can leave a validation or test split empty.
-
-For example, to convert and inspect just one crop with buffering:
-
-```shell
-python data_preprocess/create_coco_osm.py --data_root crops \
-  --output data/coco_osm_sample --sample_name queens_01156 --line_buffer_px 2
-```
+### Defining labels:
 
 Labels come from the fixed vocabulary `VOCAB` in `create_coco_osm.py` (e.g. `street`, `building`, `park`). Anything not listed becomes `unknown` / `unknown_line`. When training with labels, set `--semantic_classes` to the number of labels + 1. We hand-reviewed the vocabulary.
 
-`data/coco_osm/` is about 2.6 GB and can be regenerated with the command above. It is not tracked and should be included in the `.gitignore.`
+`data/coco_osm/` is a large folder and can be regenerated with the command above. It is not tracked and should be included in the `.gitignore.`
 
 Files in `_scratch` include ad-hoc work and additional testing. These should not be reviewed.
 
