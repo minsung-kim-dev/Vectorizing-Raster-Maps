@@ -2,9 +2,9 @@
 
 Jennah Gosciak (jrg377), Minsung Kim (mk2797), Sunishka Sil (ss4469)
 
-The next few sections describe the setup of the repository and how to work with Google Cloud. Note: many of the methods in this repository rely on an updated version of a [forked Raster2Seq repository](https://github.com/jennahgosciak/Raster2Seq).
+The next few sections describe the setup of the repository, installation, and how to work with a virtual machine using Google Cloud. Note: many of the methods in this repository rely on an updated version of a [forked Raster2Seq repository](https://github.com/jennahgosciak/Raster2Seq).
 
-Skip to the [Training](#training) section to understand how to train
+Skip to the [Training](#training) section to understand how to train and evaluate the models.
 
 ## Installation
 
