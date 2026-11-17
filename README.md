@@ -4,7 +4,7 @@ Jennah Gosciak (jrg377), Minsung Kim (mk2797), Sunishka Sil (ss4469)
 
 The next few sections describe the setup of the repository and how to work with Google Cloud.
 
-Skip to the [Training](##training) section to understand how to train
+Skip to the [Training](#training) section to understand how to train
 
 ## Installation
 
@@ -159,5 +159,5 @@ Labels come from the fixed vocabulary `VOCAB` in `create_coco_osm.py` (e.g. `str
 
 Files in `_scratch` include ad-hoc work and additional testing. These should not be reviewed.
 
-<a name="training"></a>
-## Training
+
+##Training
