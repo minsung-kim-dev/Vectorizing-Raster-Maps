@@ -3,7 +3,7 @@
 - Stage 1 (shapes): `training/train_osm.sh` vs. `tools/train_cc5k.sh`
 - Stage 2 (labels): `training/finetune_osm.sh` vs. `tools/finetune_cc5k.sh`
 
-Needs the fork (jennahgosciak/Raster2Seq, branch `osm-changes`) next to this repo. Only differences are listed.
+Needs the fork (jennahgosciak/Raster2Seq, branch `osm-changes`) next to this repo. Below we list. some of the differences.
 
 ## Stage 1
 
