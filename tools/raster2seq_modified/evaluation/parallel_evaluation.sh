@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Evaluate a checkpoint on a split in K parallel parts, then combine the results.
-# Usage (raster2seq env): bash tools/eval_parallel_osm.sh [job] [data] [split] [K]
+# Usage (raster2seq env): bash tools/raster2seq_modified/evaluation/parallel_evaluation.sh [job] [data] [split] [K]
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../../.."
 export PYTHONPATH=$PWD
 JOB=${1:-osm_stage2_queens_4000pretrain} DATA=${2:-data/coco_osm_flushing} SPLIT=${3:-val} K=${4:-4}
 CKPT=save_models/$JOB/checkpoint.pth

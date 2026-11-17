@@ -2,10 +2,10 @@
 # Raster2Seq training pipeline for the OSM crops, modelled on Raster2Seq's tools/train_cc5k.sh
 # (stage 1, shapes only) and tools/finetune_cc5k.sh (stage 2, labels).
 #
-# Usage (in the raster2seq env):  bash tools/finetune_osm.sh
+# Usage (in the raster2seq env):  bash tools/raster2seq_modified/training/finetune_osm.sh
 set -euo pipefail
 
-REPO=$(cd "$(dirname "$0")/.." && pwd)
+REPO=$(cd "$(dirname "$0")/../../.." && pwd)
 R2S=${R2S:-$REPO/../Raster2Seq}
 CROPS=${CROPS:-$REPO/crops}
 DATA=${DATA:-$REPO/data/coco_osm_flushing}
