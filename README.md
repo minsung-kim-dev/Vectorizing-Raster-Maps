@@ -134,11 +134,25 @@ data/coco_osm/
     └── train.json  val.json  test.json # COCO annotations (polygons and lines in PNG pixels)
 ```
 
-Splits: crops named `flushing_*` form the test set. 10% of the training data also goes to validation.
+Splits: crops whose name starts with `<test_borough>_` form the test set; val is `--val_frac` of all crops, taken from the rest.
+
+**Flushing test set.** The current data (`crops_flushing/` → `data/coco_osm_flushing`) is all Queens, with
+Flushing held out for testing. `make_boxes.py --test-nta flushing` names the boxes inside the Flushing NTAs
+`flushing_*` and keeps every other box from touching those NTAs; `--test_borough flushing` then sends
+exactly those crops to test:
+
+```shell
+python data_preprocess/make_boxes.py --n 2400 --min-m 125 --max-m 125 --boroughs queens \
+  --test-frac 0.0834 --test-nta flushing --out data/nyc_boxes_flushing.csv
+python data_preprocess/create_coco_osm.py --data_root crops_flushing --output data/coco_osm_flushing \
+  --test_borough flushing
+```
+
+Test boxes only need their center inside Flushing, so a few reach past its edge and slightly overlap train crops.
 
 Options:
-- `--test_borough` – borough used as the test set (default `queens`)
-- `--val_frac` – fraction of non-test crops used for val (default `0.1`)
+- `--test_borough` – name prefix of the test crops, e.g. `flushing` (default `queens`)
+- `--val_frac` – val size as a fraction of all crops (default `0.1`)
 - `--min_area` – drop polygons smaller than this, in px² (default `20`)
 - `--simplify_tol` – shape simplification tolerance in px, `0` = off (default `1.0`)
 - `--line_buffer_px` – buffer radius in original PNG pixels for line features; must be positive (default: no buffering)
