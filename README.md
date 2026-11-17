@@ -164,7 +164,7 @@ Files in `_scratch` include ad-hoc work and additional testing. These should not
 
 Importantly, all training and evaluation functions call methods directly from Raster2Seq. Ensure you have the correct [forked repository](https://github.com/jennahgosciak/Raster2Seq).
 
-All training of the Raster2Seq models is done via bash scripts stored in `tools/`. Raster2Seq is trained in two stages: `train_*.sh` scripts implement the first stage of training while `finetune_*.sh` implement the second stage.
+All training of the Raster2Seq models is done via bash scripts stored in `tools/`. We separate scripts into model-specific folders and differentiate between training and evaluation. Raster2Seq is trained in two stages: `train_*.sh` scripts implement the first stage of training while `finetune_*.sh` implement the second stage.
 
 1. `tools/train_osm.sh`: stage 1 for the modified Raster2Seq model, which learns shapes only (polygon vs. line).
 2. `tools/finetune_osm.sh`: stage 2, starts from stage 1 and learns the semantic labels along with an additional attention head.
