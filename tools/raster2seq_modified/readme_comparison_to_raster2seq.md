@@ -34,4 +34,4 @@ Also added: `--per_token_sem_loss --jointly_train --disable_wd_as_line`.
 - Ignored if `--resume` finds a checkpoint.
 - `--seq_len` can differ; `--num_bins` can't (both use 32).
 - Weights with a different shape (e.g. label heads) are skipped and trained from scratch.
-- Stage 1's label head initialises stage 2's geometry head.
+- Stage 1's label head initializes stage 2's geometry head.
