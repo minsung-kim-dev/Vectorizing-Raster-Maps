@@ -159,4 +159,5 @@ Labels come from the fixed vocabulary `VOCAB` in `create_coco_osm.py` (e.g. `str
 
 Files in `_scratch` include ad-hoc work and additional testing. These should not be reviewed.
 
+<a name="training"></a>
 ## Training
