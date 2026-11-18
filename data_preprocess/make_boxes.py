@@ -71,6 +71,8 @@ def sample_boxes(rng, polys, n, min_m, max_m, land, max_overlap=0.5, start=0, av
         # vary aspect ratio for height
         h = w * rng.uniform(0.75, 1.33)
         # half the box size in degrees
+        # https://stackoverflow.com/questions/79873006/converting-latitude-and-longitude-from-degrees-to-meters
+        # alternative is to convert to projected coordinate system and calculate the area that way
         dlat = h / 111_320 / 2
         dlon = w / (111_320 * math.cos(math.radians(lat))) / 2
         b = box(lon - dlon, lat - dlat, lon + dlon, lat + dlat)
