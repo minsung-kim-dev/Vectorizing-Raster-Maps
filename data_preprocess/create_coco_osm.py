@@ -73,6 +73,7 @@ if 'unknown' not in VOCAB.keys():
     VOCAB |= {"unknown": []}
 if 'unknown_line' not in VOCAB.keys():
     VOCAB |= {"unknown_line": []}
+print(VOCAB)
 
 # inverts VOCAB mapping so then it is a tuple -> label
 LABELS = {key: label for label, keys in VOCAB.items() for key in keys}
@@ -81,6 +82,16 @@ CATEGORIES = {label: i for i, label in enumerate(VOCAB)}
 SKIP = {  # dropped entirely: (layer, class) or (layer, "*")
     ("transportation_name", "*"), ("water_name", "*"),  # copies of other features, only used to place names
     ("boundary", "*"), ("landuse", "neighbourhood"),      # administrative, not drawn as visible features
+    # not drawn by utils/render_carto.py, so not visible in the images
+    ("aeroway", "*"),                                     # aerodrome, taxiway, apron, runway
+    ("transportation", "bridge"),                         # bridge deck outlines (the road on top is kept)
+    ("transportation", "transit"),                        # subway, light rail
+    ("transportation", "pier"), ("transportation", "busway"),
+    ("transportation", "motorway_construction"), ("transportation", "tertiary_construction"),
+    ("transportation", "service_construction"), ("transportation", "minor_construction"),
+    ("transportation", "path_construction"),
+    ("landuse", "zoo"), ("landuse", "education"), ("landuse", "toilets"),
+    ("mountain_peak", "cliff"),
 }
 
 def label_for(layer, cls, subclass, geom_type):
@@ -123,7 +134,7 @@ def make_to_px(data, png_width):
     x0, y0, x1, _ = pixel_window(data["bbox"], zoom)
     # get scaling ratio
     scale = png_width / (x1 - x0) # should be 2
-    print(f'Scale is: {scale}')
+    #print(f'Scale is: {scale}')
 
     # conversion with specific values pre-set
     def to_px(lon, lat):
