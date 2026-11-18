@@ -23,7 +23,7 @@ import pyogrio
 import shapely
 import geopandas as gpd
 from PIL import Image
-from shapely.geometry import mapping
+from shapely.geometry import mapping, box
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "utils"))
 import render_carto as rc
@@ -45,7 +45,7 @@ STYLE_COLORS = {
     "omt": np.array(ro.style_colours()),
 }
 
-def extract(bbox, zoom, buffer_px):
+def extract(bbox):
     """Features under the image (plus buffer_px on each side), clipped, in lon/lat."""
     # the image's corners in zoom-`zoom` pixels, plus the buffer, converted to Web Mercator meters
     x0, y0, x1, y1 = gpd.GeoSeries([box(*bbox)], crs=4326).to_crs(3857).total_bounds
@@ -99,7 +99,7 @@ def make_crop(job):
     try:
         t = time.time()
         # extract features for the bbox and default zoom level of tile
-        features = extract(bbox, a.zoom, a.buffer_px)
+        features = extract(bbox)
         with gzip.open(gj, "wt", encoding="utf-8") as fh:
             # create a geojson file
             json.dump({"type": "FeatureCollection", "bbox": bbox,
@@ -139,7 +139,6 @@ def main():
     ap.add_argument("--boxes", required=True)
     ap.add_argument("--zoom", type=int, default=18, help="render zoom (default 18)")
     ap.add_argument("--scale", type=int, default=2, help="2 = high-DPI images")
-    ap.add_argument("--buffer-px", type=int, default=32, help="data kept beyond the image edge")
     ap.add_argument("--out", default="crops")
     ap.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 1))
     ap.add_argument("--all-names", action="store_true", help="keep names in every language")
@@ -168,7 +167,6 @@ def main():
             w.writeheader()
             w.writerows(index)
     print(f"done: {len(index)} written, {len(jobs) - len(index)} failed -> {a.out}/")
-
 
 if __name__ == "__main__":
     main()
