@@ -13,6 +13,8 @@ data/coco_osm_val200/
 data/coco*
 data/nyc_nta_2020.geojson
 data_plots/
+data/teacher_forced_predictions.png
+data/ugly_predictions.png
 *.tar.gz
 *.tsv.gz
 .DS_Store
