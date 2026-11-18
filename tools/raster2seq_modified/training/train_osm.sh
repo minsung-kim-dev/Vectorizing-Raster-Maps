@@ -7,45 +7,23 @@ set -euo pipefail
 
 REPO=$(cd "$(dirname "$0")/../../.." && pwd)
 R2S=${R2S:-$REPO/../Raster2Seq}
-CROPS=${CROPS:-$REPO/crops}
-DATA=${DATA:-$REPO/data/coco_osm_flushing}
-OUTPUT_DIR=${OUTPUT_DIR:-$REPO/save_models}
+DATA=${DATA:-/share/garg/jrg377/coco_osm_newvocab}
+OUTPUT_DIR=${OUTPUT_DIR:-/share/garg/jrg377/osm_stage1_checkpoints}
 
-IMAGE_SIZE=512    
-SEQ_LEN=1024      
+IMAGE_SIZE=256    
+SEQ_LEN=512      
 NUM_BINS=32       # matches Raster2Seq's CubiCasa checkpoint used as the starting point
 ROW_TOL=0.08      # shape order: rows 8% of the image height, top to bottom, left to right (needs the fork)
 CLS_COEFF=5
 COO_COEFF=20
 CONVERTER=v3
 NUM_GPUS=1
-BATCH_SIZE=8      # lower if the GPU runs out of memory
-# EPOCHS=1000
+BATCH_SIZE=12      # lower if the GPU runs out of memory
 EPOCHS=200
-JOB="osm_stage_queens4000_pretrain"
+JOB="osm_stage_queens4000_pretrain_small"
 
-# vocabulary size + 1 (Raster2Seq reserves the last class), read from create_coco_osm.py
-SEM_CLASSES=$(cd "$REPO" && python -c "from data_preprocess.create_coco_osm import CATEGORIES; print(len(CATEGORIES) + 1)")
 
-# ---- 1. COCO dataset (skipped if it already exists) ----
-if [[ ! -d "$DATA/annotations" ]]; then
-    (cd "$REPO" && python data_preprocess/create_coco_osm.py --data_root "$CROPS" --output "$DATA")
-fi
-
-# ---- 2. How many crops fit in SEQ_LEN tokens (corners + one separator/end per shape) ----
-python - "$DATA/annotations/val.json" "$SEQ_LEN" <<'EOF'
-import collections, json, sys
-import numpy as np
-anns, seq_len = json.load(open(sys.argv[1]))["annotations"], int(sys.argv[2])
-need = collections.Counter()
-for a in anns:
-    need[a["image_id"]] += len(a["segmentation"][0]) // 2 + 1
-n = np.array(list(need.values()))
-print(f"val tokens per image: median {np.median(n):.0f}, max {n.max()} | "
-      f"{np.mean(n <= seq_len):.0%} fit in SEQ_LEN={seq_len}")
-EOF
-
-# ---- Stage 1: shapes only (GPU) ----
+# ---- Stage 1 training ----
 cd "$R2S"
 
 mkdir -p wandb_keys && touch "wandb_keys/$(whoami)_wandb.key"  # main_ddp.py otherwise prompts for a wandb key

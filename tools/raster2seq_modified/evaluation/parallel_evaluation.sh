@@ -4,12 +4,17 @@
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
 export PYTHONPATH=$PWD
-JOB=${1:-osm_stage2_queens_4000pretrain} DATA=${2:-data/coco_osm_flushing} SPLIT=${3:-val} K=${4:-4}
-CKPT=save_models/$JOB/checkpoint.pth
+JOB=${1:-osm_stage2_queens_4000pretrain_newvocab}
+DATA=${2:-/share/garg/jrg377/coco_osm_newvocab}
+SPLIT=${3:-test}
+K=${4:-4}
+CKPT=${CKPT:-/share/garg/jrg377/osm_stage2_queens4000_newvocab_checkpoints/osm_stage2_queens_4000pretrain_newvocab/checkpoint.pth}
 OUT=eval_outputs/$JOB/$SPLIT
-MODEL=(--dataset_name=osm --semantic_classes=34 --per_token_sem_loss --input_channels 3
+SEMANTIC_CLASSES=$(python -c "from data_preprocess.create_coco_osm import CATEGORIES; print(len(CATEGORIES) + 1)")
+
+MODEL=(--dataset_name=osm --semantic_classes=$SEMANTIC_CLASSES --per_token_sem_loss --input_channels 3
        --image_size 512 --poly2seq --seq_len 1024 --num_bins 32 --row_tolerance 0.08 --converter_version v3
-       --disable_poly_refine --dec_attn_concat_src --use_anchor --ema4eval --add_geom_head --geom_mask)
+       --disable_poly_refine --dec_attn_concat_src --use_anchor --ema4eval --add_geom_head --geom_mask --sem_attn )
 
 # MODEL=(--dataset_name=osm --semantic_classes=3 --geom_classes --per_token_sem_loss --input_channels 3
 #        --converter_version v3
@@ -27,9 +32,9 @@ ids = {i['id'] for i in d['images']}; d['annotations'] = [a for a in d['annotati
 json.dump(d, open('$SHARDS/$k/annotations/$SPLIT.json', 'w'))
 for i in d['images']: os.symlink(os.path.abspath('$DATA/$SPLIT/' + i['file_name']), '$SHARDS/$k/$SPLIT/' + i['file_name'])"
     python ../Raster2Seq/eval.py --checkpoint "$CKPT" --dataset_root "$SHARDS/$k" --eval_set "$SPLIT" \
-        --output_dir "$OUT/part$k" "${MODEL[@]}" --plot_pred '' --plot_density '' --plot_gt '' \
+        --output_dir "$OUT/part$k" "${MODEL[@]}" --plot_pred '' --plot_density '' --plot_gt ''  --per_label_eval \
         > "$OUT/part$k/log.txt" 2>&1 &
 done
 wait
 
-python tools/raster2seq_modified/evaluation/combine_resutls.py "$OUT"
+python tools/raster2seq_modified/evaluation/run_parallel_results.py "$OUT"

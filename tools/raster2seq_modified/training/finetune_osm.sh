@@ -9,11 +9,13 @@ REPO=$(cd "$(dirname "$0")/../../.." && pwd)
 R2S=${R2S:-$REPO/../Raster2Seq}
 CROPS=${CROPS:-$REPO/crops}
 DATA=${DATA:-/share/garg/jrg377/coco_osm_newvocab}
-OUTPUT_DIR=${OUTPUT_DIR:-/share/garg/jrg377/osm_stage2_queens4000_newvocab_checkpoints}
+# OUTPUT_DIR=${OUTPUT_DIR:-/share/garg/jrg377/osm_stage2_queens4000_newvocab_checkpoints}
+OUTPUT_DIR=${OUTPUT_DIR:-/share/garg/jrg377/osm_stage2_checkpoints}
 
-IMAGE_SIZE=512    
-SEQ_LEN=1024      
-NUM_BINS=32       # matches Raster2Seq's CubiCasa checkpoint used as the starting point
+
+IMAGE_SIZE=256   
+SEQ_LEN=512      
+NUM_BINS=32       # matches Raster2Seq's CubiCasa checkpoint
 ROW_TOL=0.08      # shape order: rows 8% of the image height, top to bottom, left to right (needs the fork)
 CLS_COEFF=5
 COO_COEFF=20
@@ -22,21 +24,18 @@ CONVERTER=v3
 NUM_GPUS=1
 BATCH_SIZE=8      # lower if the GPU runs out of memory
 EPOCHS=200
+JOB=osm_stage2_queens_4000pretrain_small
 # vocabulary size + 1 (Raster2Seq reserves the last class), read from create_coco_osm.py
 SEM_CLASSES=$(cd "$REPO" && python -c "from data_preprocess.create_coco_osm import CATEGORIES; print(len(CATEGORIES) + 1)")
 
-# ---- 1. COCO dataset (skipped if it already exists) ----
-if [[ ! -d "$DATA/annotations" ]]; then
-    (cd "$REPO" && python data_preprocess/create_coco_osm.py --data_root "$CROPS" --output "$DATA")
-fi
 
-# ---- 5. Stage 2: shapes + labels, starting from stage 1 (GPU) ----
+# ---- Stage 2 training ----
 cd "$R2S"
 torchrun --nproc_per_node=${NUM_GPUS} --master_port=14159 main_ddp.py \
     --dataset_name=osm \
     --dataset_root="$DATA" \
     --semantic_classes=${SEM_CLASSES} \
-    --job_name=osm_stage2_queens_4000pretrain_newvocab \
+    --job_name= ${JOB} \
     --output_dir "$OUTPUT_DIR" \
     --batch_size ${BATCH_SIZE} \
     --input_channels=3 \
@@ -53,7 +52,7 @@ torchrun --nproc_per_node=${NUM_GPUS} --master_port=14159 main_ddp.py \
     --cls_loss_coef ${CLS_COEFF} \
     --coords_loss_coef ${COO_COEFF} \
     --room_cls_loss_coef ${SEM_COEFF} \
-    --resume "$OUTPUT_DIR/osm_stage2_queens_4000pretrain_newvocab/checkpoint.pth" \
+    --resume "$OUTPUT_DIR/$JOB/checkpoint.pth" \
     --ema4eval \
     --disable_poly_refine \
     --dec_attn_concat_src \
@@ -65,4 +64,6 @@ torchrun --nproc_per_node=${NUM_GPUS} --master_port=14159 main_ddp.py \
     --geom_mask \
     --sem_attn \
     --disable_wd_as_line \
-    --start_from_checkpoint "/share/garg/jrg377/osm_stage_queens4000_pretrain/checkpoint.pth"
+    --start_from_checkpoint "/share/garg/jrg377/osm_stage1_checkpoints/osm_stage_queens4000_pretrain_small/checkpoint.pth"
+
+    # --start_from_checkpoint "/share/garg/jrg377/osm_stage_queens4000_pretrain/checkpoint.pth"
