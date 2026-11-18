@@ -122,7 +122,10 @@ def extract_geometries(data, to_px):
             pts = [to_px(lon, lat) for lon, lat in (part[:-1] if is_poly else part)]
             if len(pts) >= 2 + is_poly:
                 out.append((pts, label, geom_type))
-    return out
+    # identical shapes can survive from the source data (e.g. two copies of a large area): keep one of each
+    # the same key is jsut replaced when there's a duplicate in terms of the points
+    return list({(label, geom_type, tuple(np.round(pts, 3).ravel())): (pts, label, geom_type)
+                 for pts, label, geom_type in out}.values())
 
 
 def make_to_px(data, png_width):

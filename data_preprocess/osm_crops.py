@@ -52,14 +52,27 @@ def extract(bbox):
     area = (x0 - BUFFER_M, y0 - BUFFER_M, x1 + BUFFER_M, y1 + BUFFER_M) # buffered area
     features = []
     for layer in LAYERS:
-        # read data for specific crop
-        df = pyogrio.read_dataframe(GPKG, layer=layer, bbox=area)  # features overlapping the area
+        df = pyogrio.read_dataframe(GPKG, layer=layer, bbox=area)
         df = df.explode(index_parts=False)  # one row per shape (buildings come grouped per tile)
-        df = df[~df.geometry.normalize().to_wkb().duplicated()]  # drop tile-border copies of the same shape
+        df["geometry"] = df.geometry.clip_by_rect(*area)  # clip first, so copies are compared as they'll be saved
+        df = df[~df.geometry.is_empty]
+        df = df[~df.geometry.set_precision(0.01, mode="pointwise").normalize().to_wkb().duplicated()]  # repeated shapes
+        if len(df):  # some layers have no shapes in a crop
+            g = shapely.make_valid(df.geometry.values); a = shapely.area(g)
+            kind = df.reindex(columns=["class", "subclass"]).astype(str).agg("/".join, axis=1).to_numpy()
+            i, j = shapely.STRtree(g).query(g, predicate="intersects")
+            # i!= j -> must be two different shapes
+            # checks area intersection relative to first shape
+            # only compares cases where j is larger than i
+            dup = ((i != j) & (kind[i] == kind[j]) & (shapely.area(shapely.intersection(g[i], g[j])) > 0.8 * a[i])
+                   & ((a[i] < a[j]) | ((a[i] == a[j]) & (i > j))))
+            df = df.iloc[np.setdiff1d(np.arange(len(df)), i[dup])]
+        
         if layer == "poi" and POI_CLASSES is not None:
             df = df[df["class"].isin(POI_CLASSES)]
-        geoms = df.geometry.clip_by_rect(*area).to_crs(4326)  # clip in Web Mercator, then to lon/lat
-        geoms = shapely.transform(geoms.values, lambda xy: np.round(xy, 7))  # round to save space 7 decimals
+        geoms = df.geometry.to_crs(4326)  # already clipped
+        geoms = shapely.transform(geoms.values, lambda xy: np.round(xy, 7))
+
         for g, props in zip(geoms, df.drop(columns=["geometry", "mvt_id"]).to_dict("records")):
             # skip empty clips and mixed geometry collections
             if g.is_empty or g.geom_type == "GeometryCollection":
