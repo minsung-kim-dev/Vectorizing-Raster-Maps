@@ -47,17 +47,17 @@ STYLE_COLORS = {
 
 def extract(bbox):
     """Features under the image (plus buffer_px on each side), clipped, in lon/lat."""
-    # the image's corners in zoom-`zoom` pixels, plus the buffer, converted to Web Mercator meters
+    # the image's corners in zoom-`zoom` pixels, plus the buffer, converted to Web Mercator projection
     x0, y0, x1, y1 = gpd.GeoSeries([box(*bbox)], crs=4326).to_crs(3857).total_bounds
     area = (x0 - BUFFER_M, y0 - BUFFER_M, x1 + BUFFER_M, y1 + BUFFER_M) # buffered area
     features = []
     for layer in LAYERS:
-        # read data for specific area
+        # read data for specific crop
         df = pyogrio.read_dataframe(GPKG, layer=layer, bbox=area)  # features overlapping the area
         if layer == "poi" and POI_CLASSES is not None:
             df = df[df["class"].isin(POI_CLASSES)]
         geoms = df.geometry.clip_by_rect(*area).to_crs(4326)  # clip in Web Mercator, then to lon/lat
-        geoms = shapely.transform(geoms.values, lambda xy: np.round(xy, 7))  # round to save space 7 decimals (~1 cm)
+        geoms = shapely.transform(geoms.values, lambda xy: np.round(xy, 7))  # round to save space 7 decimals
         for g, props in zip(geoms, df.drop(columns=["geometry", "mvt_id"]).to_dict("records")):
             # skip empty clips and mixed geometry collections
             if g.is_empty or g.geom_type == "GeometryCollection":

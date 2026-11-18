@@ -52,7 +52,7 @@ AREA_COLORS = {
     "park": "#c8facc", "village_green": "#cdebb0", "recreation_ground": "#dffce2",
     "scrub": "#c8d7ab", "heath": "#d6d99f",
     "bare_rock": "#eee5dc", "scree": "#ede4dc", "sand": "#f5e9c6", "beach": "#fff1ba",
-    "wetland": LAND,  # drawn as pattern on top
+    "wetland": None, #LAND,  # drawn as pattern on top
     "ice": "#ddecec", "glacier": "#ddecec",
     # landuse (class)
     "residential": "#e0dfdf", "suburb": None, "neighbourhood": None,
@@ -196,11 +196,16 @@ def lines_path(parts):
     return Path(verts, codes) if verts else None
 
 
+# def path_area(path):
+#     if path is None:
+#         return 0
+#     ext = path.get_extents()
+#     return ext.width * ext.height
 def path_area(path):
+    """Filled area of a path (sum of its rings), to draw larger areas first."""
     if path is None:
         return 0
-    ext = path.get_extents()
-    return ext.width * ext.height
+    return sum(abs(signed_area(list(map(tuple, p)))) for p in path.to_polygons())
 
 # ----------------------------------------------------------------------------
 # Rendering
@@ -247,9 +252,15 @@ def render(path, out, zoom=None, scale=1):
         p = polygon_path(f["geometry"], proj) if f["geometry"]["type"] in ("Polygon", "MultiPolygon") else None
         if p is None:
             continue
-        areas.append((path_area(p), p, key, color))
-    areas.sort(key=lambda a: -a[0])
-    for _, p, key, color in areas:
+    #     areas.append((path_area(p), p, key, color))
+    # areas.sort(key=lambda a: -a[0])
+    # for _, p, key, color in areas:
+        # break ties
+        areas.append((path_area(p), p, key, color, L(f)))
+    # largest first; exact ties (both cover the whole crop): landuse, then parks, then other landcover on top
+    tie = lambda key, layer: 0 if layer == "landuse" else 1 if key == "park" else 2
+    areas.sort(key=lambda a: (-round(a[0]), tie(a[2], a[4])))
+    for _, p, key, color, _ in areas:
         if color:
             ax.add_patch(PathPatch(p, facecolor=color, edgecolor="none", lw=0, zorder=1))
         oc = AREA_OUTLINES.get(key)
