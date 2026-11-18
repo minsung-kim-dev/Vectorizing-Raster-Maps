@@ -54,6 +54,8 @@ def extract(bbox):
     for layer in LAYERS:
         # read data for specific crop
         df = pyogrio.read_dataframe(GPKG, layer=layer, bbox=area)  # features overlapping the area
+        df = df.explode(index_parts=False)  # one row per shape (buildings come grouped per tile)
+        df = df[~df.geometry.normalize().to_wkb().duplicated()]  # drop tile-border copies of the same shape
         if layer == "poi" and POI_CLASSES is not None:
             df = df[df["class"].isin(POI_CLASSES)]
         geoms = df.geometry.clip_by_rect(*area).to_crs(4326)  # clip in Web Mercator, then to lon/lat
