@@ -34,7 +34,7 @@ ALL_NAMES = False  # keep every name:xx translation (--all-names)
 NAMES = {"name", "name_en", "name_int"}  # names the renderers can use
 SKIP_LAYERS = {"housenumber"}  # left out of the GeoJSON (--style carto; omt keeps everything)
 POI_CLASSES = {"railway"}  # the only poi features kept with --style carto (stations); omt keeps all
-ZOOM=18
+
 # every color each style uses; palette PNGs always keep these exactly
 STYLE_COLORS = {
     "carto": np.array(sorted({tuple(int(h[i:i + 2], 16) for i in (1, 3, 5))
@@ -102,7 +102,7 @@ def load_tile(z, x, y):
             # normalizes xy
             g = shapely.transform(shape(f["geometry"]), lambda xy: xy / scale)
             if g.geom_type == "Point" and not (0 <= g.x < 1 and 0 <= g.y < 1):
-                continue  # duplicate of a neighbouring tile's point
+                continue  # duplicate of a neighboring tile's point
             # add layer to list of layers
             layers.append(layer)
             # add properties 
@@ -191,7 +191,7 @@ def make_crop(job):
                                     "pixel_window": list(pixel_window(bbox, a.zoom)),
                                     "attribution": "© OpenMapTiles © OpenStreetMap contributors"},
                        "features": features}, fh, ensure_ascii=False, separators=(",", ":"))
-        size = ""
+
         # render with style from render_rc
         renderer = ro if a.style == "omt" else rc
         # formatting from render_rc
@@ -221,7 +221,7 @@ def main():
     ap.add_argument("--mbtiles", required=True)
     ap.add_argument("--boxes", required=True)
     ap.add_argument("--zoom", type=int, default=18, help="render zoom (default 18)")
-    ap.add_argument("--scale", type=int, default=1, help="2 = high-DPI images")
+    ap.add_argument("--scale", type=int, default=2, help="2 = high-DPI images")
     ap.add_argument("--buffer-px", type=int, default=32, help="data kept beyond the image edge")
     ap.add_argument("--out", default="crops")
     ap.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 1))
