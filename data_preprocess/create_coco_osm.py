@@ -44,9 +44,9 @@ REPO = Path(__file__).resolve().parents[1]
 R2S = REPO.parent / "Raster2Seq"
 sys.path[:0] = [str(REPO), str(R2S), str(R2S / "data_preprocess" / "waffle")]
 
-from create_coco_waffle_benchmark import convert_numpy_to_python, create_coco_bounding_box, prepare_dict  # noqa: E402
-from util.poly_ops import resort_corners  # noqa: E402
-from utils.render_carto import lonlat_to_px, pixel_window  # noqa: E402
+from create_coco_waffle_benchmark import convert_numpy_to_python, create_coco_bounding_box, prepare_dict 
+from util.poly_ops import resort_corners 
+from utils.render_carto import lonlat_to_px, pixel_window 
 
 # GeoJSON geometry type -> (geom_type, list of point lists); polygons keep only the outer ring
 PARTS = {

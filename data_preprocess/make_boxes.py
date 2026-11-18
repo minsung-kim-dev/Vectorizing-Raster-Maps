@@ -2,9 +2,11 @@
 """
 make_boxes.py: generate random NYC bounding boxes of varying sizes for osm_crops.py.
 
-Box centers are sampled inside rough, hand-drawn outlines of the five boroughs, and boxes that are
-less than half land are skipped (land = all NYC 2020 NTAs, which follow the shoreline, minus OSM water
-such as lakes in parks).
+TODO: use the offiical borough boundaries (though not much would change) and
+shift to using a projected coordinate system instead of degrees approximation.
+
+Box centers are sampled inside rough, hand-drawn outlines of the five boroughs.
+Boxes that are less than half land are skipped.
 
 Usage:
   python make_boxes.py --n 3000 --min-m 150 --max-m 2500 --seed 42 --out boxes.csv
@@ -27,25 +29,21 @@ from shapely.geometry import Point, Polygon, box
 NTA_URL = ("https://services5.arcgis.com/GfwWNkhOj9bNBqoJ/arcgis/rest/services/NYC_Neighborhood_Tabulation_Areas_2020/"
            "FeatureServer/0/query?where=1=1&outFields=*&outSR=4326&f=pgeojson")
 
+# alternative, pull from NYC DCP URL
+BORO_URL = ("https://services1.arcgis.com/oOUgp466Coyjcu6V/ArcGIS/rest/services/NYC_Borough/FeatureServer/"
+            "0/query?where=1=1&outFields=*&outSR=4326&f=pgeojson")
 BOROUGHS = {  # rough (lon, lat) outlines
-    "manhattan": [(-74.016, 40.701), (-73.995, 40.707), (-73.973, 40.711), (-73.971, 40.744),
-                  (-73.958, 40.759), (-73.940, 40.784), (-73.930, 40.800), (-73.910, 40.874),
-                  (-73.927, 40.878), (-73.947, 40.850), (-73.962, 40.818), (-73.991, 40.781),
-                  (-74.008, 40.757), (-74.012, 40.741), (-74.016, 40.717)],
-    "brooklyn": [(-74.000, 40.703), (-73.962, 40.736), (-73.925, 40.730), (-73.903, 40.695),
-                 (-73.868, 40.695), (-73.856, 40.650), (-73.866, 40.628), (-73.900, 40.610),
-                 (-73.935, 40.580), (-74.010, 40.576), (-74.034, 40.605), (-74.040, 40.636),
-                 (-74.020, 40.660), (-74.012, 40.682)],
     "queens": [(-73.958, 40.745), (-73.935, 40.778), (-73.905, 40.783), (-73.860, 40.768),
                (-73.830, 40.785), (-73.780, 40.792), (-73.765, 40.770), (-73.701, 40.750),
                (-73.725, 40.655), (-73.760, 40.625), (-73.790, 40.640), (-73.830, 40.650),
                (-73.856, 40.650), (-73.868, 40.695), (-73.903, 40.695), (-73.925, 40.730)],
-    "bronx": [(-73.933, 40.808), (-73.900, 40.802), (-73.860, 40.808), (-73.830, 40.808),
-              (-73.795, 40.812), (-73.790, 40.840), (-73.810, 40.875), (-73.840, 40.905),
-              (-73.900, 40.913), (-73.915, 40.880), (-73.930, 40.835)],
-    "staten_island": [(-74.070, 40.645), (-74.180, 40.645), (-74.205, 40.600), (-74.250, 40.505),
-                      (-74.200, 40.512), (-74.130, 40.545), (-74.060, 40.597)],
 }
+
+def plot_boroughs(out="boroughs_check.png"):
+    """Cross-check rough lon/lat coordiantes with the official borough bounadries from the city."""
+    ax = gpd.read_file(BORO_URL).boundary.plot(color="grey", figsize=(8, 8))
+    gpd.GeoSeries([Polygon(v) for v in BOROUGHS.values()]).boundary.plot(ax=ax, color="red")
+    ax.figure.savefig(out)
 
 
 def load_nta(path):
@@ -70,14 +68,17 @@ def sample_boxes(rng, polys, n, min_m, max_m, land, max_overlap=0.5, start=0, av
         lon, lat = rng.uniform(minx, maxx), rng.uniform(miny, maxy)
         if not polys[boro].contains(Point(lon, lat)):
             continue
-        # log-uniform size so small and large boxes are both well represented
         # creates box around center point
         w = math.exp(rng.uniform(math.log(min_m), math.log(max_m)))
+        # vary aspect ratio for height
         h = w * rng.uniform(0.75, 1.33)
-        # half the box size in degrees (1 deg latitude ~ 111,320 m; longitude shrinks by cos(lat))
+        # half the box size in degrees
+        # https://stackoverflow.com/questions/79873006/converting-latitude-and-longitude-from-degrees-to-meters
+        # alternative is to convert to projected coordinate system and calculate the area that way
         dlat = h / 111_320 / 2
         dlon = w / (111_320 * math.cos(math.radians(lat))) / 2
         b = box(lon - dlon, lat - dlat, lon + dlon, lat + dlat)
+
         if land.intersection(b).area < 0.5 * b.area or (avoid is not None and avoid.intersects(b)):
             continue
         # skip if an earlier box covers more than max_overlap of this one
@@ -100,7 +101,7 @@ def main():
     p.add_argument("--test-frac", type=float, default=None,
                    help="fraction of boxes in the held-out borough (e.g. 0.1); default: all boroughs area-weighted")
     p.add_argument("--holdout", default="queens", choices=list(BOROUGHS), help="held-out borough for --test-frac")
-    p.add_argument("--test-nta", default=None,
+    p.add_argument("--test-nta", default='flushing',
                    help="with --test-frac: hold out the NTAs whose name contains this text instead of a borough")
     p.add_argument("--nta-file", default="data/nyc_nta_2020.geojson", help="NYC 2020 NTAs, for land and --test-nta (downloaded if missing)")
     p.add_argument("--osm-file", default="osm_data/NewYork.gpkg", help="OSM GeoPackage, for water")
@@ -109,23 +110,29 @@ def main():
     a = p.parse_args()
 
     rng = random.Random(a.seed)
+    # here, will just be filtered to Queens (not all of the city)
     polys = {k: Polygon(v) for k, v in BOROUGHS.items() if k in a.boroughs}
-    nta = load_nta(a.nta_file)
+    nta = load_nta(a.nta_file) # load nta file
+    # load water
     water = gpd.read_file(a.osm_file, layer="multipolygons", where="natural = 'water'")
-    land = nta.union_all().difference(water.union_all())  # every NTA, minus lakes etc.
+    # load land (from nta file)
+    land = nta.union_all().difference(water.union_all())  # every NTA, clipped to shoreline
     if a.test_frac is None:
+        # number of images for train
         rows = sample_boxes(rng, polys, a.n, a.min_m, a.max_m, land, a.max_overlap)
     else:
+        # number of images to go in test data
         n_test = round(a.n * a.test_frac)
-        if a.test_nta:
-            match = nta[nta.NTAName.str.contains(a.test_nta, case=False)]
-            print("test NTAs:", ", ".join(match.NTAName))
-            area = match.union_all()
-            rows = sample_boxes(rng, polys, a.n - n_test, a.min_m, a.max_m, land, a.max_overlap, avoid=area)
-            test = {a.test_nta.lower().replace(" ", "_"): area}
-        else:
-            rows = sample_boxes(rng, {k: v for k, v in polys.items() if k != a.holdout}, a.n - n_test, a.min_m, a.max_m, land, a.max_overlap)
-            test = {a.holdout: polys[a.holdout]}
+
+        # match based on keyword ("Flushing")
+        match = nta[nta.NTAName.str.contains(a.test_nta, case=False)]
+        print("test NTAs:", ", ".join(match.NTAName))
+        # union
+        area = match.union_all()
+        # avoid = exlcudes area from the 'Flushing' ntas
+        rows = sample_boxes(rng, polys, a.n - n_test, a.min_m, a.max_m, land, a.max_overlap, avoid=area)
+        # test data
+        test = {a.test_nta.lower().replace(" ", "_"): area}
         rows += sample_boxes(rng, test, n_test, a.min_m, a.max_m, land, a.max_overlap, start=len(rows))
 
     with open(a.out, "w") as f:

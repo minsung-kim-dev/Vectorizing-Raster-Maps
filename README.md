@@ -183,4 +183,4 @@ The color-threshold baseline does not need explicit training and can be found in
 - `parallel_evaluation.sh`: same process as above, but splits the set of images into K parts to speed up evaluation. Evaluates images in in parallel and then combines them. Each part is weighted by the number of images in which it appears.
 - `create_latex_table.py`: turns the results into LaTeX tables that we can paste into the report.
 
-The color threshold baseline has its own evaluation script `eval_baseline.py)`.
+The color threshold baseline has its own evaluation script `eval_baseline.py`.
