@@ -2,7 +2,9 @@
 """
 make_boxes.py: generate random NYC bounding boxes of varying sizes for osm_crops.py.
 
-TODO: use the offiical borough boundaries (though not much would change)
+TODO: use the offiical borough boundaries (though not much would change) and
+shift to using a projected coordinate system instead of degrees approximation.
+
 Box centers are sampled inside rough, hand-drawn outlines of the five boroughs.
 Boxes that are less than half land are skipped.
 
@@ -76,6 +78,7 @@ def sample_boxes(rng, polys, n, min_m, max_m, land, max_overlap=0.5, start=0, av
         dlat = h / 111_320 / 2
         dlon = w / (111_320 * math.cos(math.radians(lat))) / 2
         b = box(lon - dlon, lat - dlat, lon + dlon, lat + dlat)
+
         if land.intersection(b).area < 0.5 * b.area or (avoid is not None and avoid.intersects(b)):
             continue
         # skip if an earlier box covers more than max_overlap of this one
