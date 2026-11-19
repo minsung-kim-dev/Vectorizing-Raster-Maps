@@ -4,10 +4,12 @@ Jennah Gosciak (jrg377), Minsung Kim (mk2797), Sunishka Sil (ss4469)
 
 The next few sections describe the setup of the repository, installation, and how to work with a virtual machine using Google Cloud. Note: many of the methods in this repository rely on an updated version of a [forked Raster2Seq repository](https://github.com/jennahgosciak/Raster2Seq).
 
-**Proposed architecture changes/contribution:** A high level overview of our decoder architecture (contrasted with the original Raster2Seq architecture) is shown here. These changes have been made directly to the forked repository shown above
+**Proposed architecture changes/contribution:** A high level overview of our decoder architecture (contrasted with the original Raster2Seq architecture) is shown here. These changes have been made directly to the forked repository shown above.
 ![diagram of raster2seq](diagrams/diagram_combined.png)
 
 Skip to the [Training](#training) section to understand how to train and evaluate the models.
+
+*Note: Generative AI is statement [here](#generative)*
 
 ## Installation
 
@@ -187,3 +189,6 @@ The color-threshold baseline does not need explicit training and can be found in
 - `create_latex_table.py`: turns the results into LaTeX tables that we can paste into the report.
 
 The color threshold baseline has its own evaluation script `eval_baseline.py`.
+
+### Generative AI Statement
+Claude Code (Opus 5.5) and ChatGPT (GPT 6.2 Astra) assisted with writing code and debugging errors.
