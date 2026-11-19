@@ -6,6 +6,9 @@ The next few sections describe the setup of the repository, installation, and ho
 
 Skip to the [Training](#training) section to understand how to train and evaluate the models.
 
+A high level overview of our decoder architecture (contrasted with the original Raster2Seq architecture) is below.
+![diagram of raster2seq](diagrams/diagram_combined.pdf)
+
 ## Installation
 
 - Clone [Raster2Seq](https://github.com/Cornell-VAILab/Raster2Seq) next to this repo (`../Raster2Seq`), at the commit this project is tested with:
