@@ -4,6 +4,9 @@ Jennah Gosciak (jrg377), Minsung Kim (mk2797), Sunishka Sil (ss4469)
 
 The next few sections describe the setup of the repository, installation, and how to work with a virtual machine using Google Cloud. Note: many of the methods in this repository rely on an updated version of a [forked Raster2Seq repository](https://github.com/jennahgosciak/Raster2Seq).
 
+**Proposed architecture changes/contribution:** A high level overview of our decoder architecture (contrasted with the original Raster2Seq architecture) is shown here. These changes have been made directly to the forked repository shown above
+![diagram of raster2seq](diagrams/diagram_combined.png)
+
 Skip to the [Training](#training) section to understand how to train and evaluate the models.
 
 ## Installation
@@ -167,10 +170,6 @@ Files in `_scratch` include ad-hoc work and additional testing. These should not
 
 
 ## Training
-
-**Proposed architecture changes/contribution:** A high level overview of our decoder architecture (contrasted with the original Raster2Seq architecture) is below.
-![diagram of raster2seq](diagrams/diagram_combined.png)
-
 
 Importantly, all training and evaluation functions call methods directly from Raster2Seq. Ensure you have the correct [forked repository](https://github.com/jennahgosciak/Raster2Seq).
 
