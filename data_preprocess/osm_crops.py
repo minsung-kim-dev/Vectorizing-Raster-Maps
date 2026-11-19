@@ -22,6 +22,7 @@ import numpy as np
 import pyogrio
 import shapely
 import geopandas as gpd
+import pandas as pd
 from PIL import Image
 from shapely.geometry import mapping, box
 
@@ -56,18 +57,26 @@ def extract(bbox):
         df = df.explode(index_parts=False)  # one row per shape (buildings come grouped per tile)
         df["geometry"] = df.geometry.clip_by_rect(*area)  # clip first, so copies are compared as they'll be saved
         df = df[~df.geometry.is_empty]
-        kind = df.reindex(columns=["class", "subclass"]).astype(str).agg("/".join, axis=1)
+        cs = df.reindex(columns=["class", "subclass"]).astype(str)
+        kind = cs["class"] + "/" + cs["subclass"]
         # repeated shapes of the same type
         df = df[~pd.DataFrame({"kind": kind, "shape": df.geometry.set_precision(0.01, mode="pointwise").normalize().to_wkb()}).duplicated().to_numpy()] 
         if len(df):  # some layers have no shapes in a crop
             g = shapely.make_valid(df.geometry.values); a = shapely.area(g)
-            kind = df.reindex(columns=["class", "subclass"]).astype(str).agg("/".join, axis=1).to_numpy()
+            cs = df.reindex(columns=["class", "subclass"]).astype(str)
+            kind = (cs["class"] + "/" + cs["subclass"]).to_numpy()
             i, j = shapely.STRtree(g).query(g, predicate="intersects")
             # i!= j -> must be two different shapes
             # checks area intersection relative to first shape
             # only compares cases where j is larger than i
             dup = ((i != j) & (kind[i] == kind[j]) & (shapely.area(shapely.intersection(g[i], g[j])) > 0.8 * a[i])
                    & ((a[i] < a[j]) | ((a[i] == a[j]) & (i > j))))
+            # iterate through duplicate pairs nad keep the union
+            for k, l in zip(i[dup], j[dup]):  # merge each piece into the shape it lies in, keeping any part sticking out
+                # store in the larger shape
+                g[l] = shapely.union(g[l], g[k])
+            # update the geometry column with this
+            df["geometry"] = gpd.GeoSeries(g, index=df.index, crs=df.crs)
             df = df.iloc[np.setdiff1d(np.arange(len(df)), i[dup])]
         
         if layer == "poi" and POI_CLASSES is not None:

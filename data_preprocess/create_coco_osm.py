@@ -95,6 +95,8 @@ SKIP = {  # dropped entirely: (layer, class) or (layer, "*")
     ("landuse", "zoo"), ("landuse", "education"), ("landuse", "toilets"),
     ("mountain_peak", "cliff"),
 }
+# shapes not drawn by utils/render_carto.py, by (layer, class, subclass, geometry)
+SKIP_SHAPES = {("transportation", "path", "platform", "polygon"), ("transportation", "path", "footway", "polygon")}
 
 def label_for(layer, cls, subclass, geom_type):
     """Vocabulary label for an OpenMapTiles feature, else "unknown"/"unknown_line"."""
@@ -127,6 +129,8 @@ def extract_geometries(data, to_px):
             continue
         # extract the actual geometry based on teh dictionary defined above
         geom_type, parts = PARTS[g["type"]](g["coordinates"])
+        if (layer, cls, subclass, geom_type) in SKIP_SHAPES:
+            continue
         label = label_for(layer, cls, subclass, geom_type)
         is_poly = geom_type == "polygon"
         for part in parts:
@@ -297,11 +301,20 @@ def main(args):
             # simplifies, clips, drops small geometries 
             anns = build_annotations(geoms, w, h, args.min_area, args.simplify_tol, args.min_line_length, 
                                         img_id, ann_id)
+            
+            # identical once clipped to the image: keep one of each
+            anns = list({(a["category_id"], tuple(np.round(a["segmentation"][0], 2))): a for a in anns}.values())
+            if not anns:  # drop empty crops
+                coco["images"].pop()                 # remove the entry just added for it
+                (out / split / png.name).unlink()    # and its saved PNG
+                continue
+            for k, a in enumerate(anns):  # renumber so ids stay consecutive and unique
+                a["id"] = ann_id + k
             coco["annotations"] += anns
             ann_id += len(anns)
         with open(out / "annotations" / f"{split}.json", "w") as fh:
             json.dump(coco, fh, default=convert_numpy_to_python)
-        print(f"{split}: {len(split_files)} images, {len(coco['annotations'])} annotations")
+        print(f"{split}: {len(coco['images'])} images, {len(coco['annotations'])} annotations")
 
     print("categories:", CATEGORIES)
     print("# of categories:", len(CATEGORIES))
