@@ -13,6 +13,7 @@ res = {k: s / n for k, (s, n) in tot.items() if n}
 res |= {p.replace("prec", "f1"): 2 * res[p] * res[p.replace("prec", "rec")] / ((res[p] + res[p.replace("prec", "rec")]) or 1)
         for p in list(res) if "prec" in p and p.replace("prec", "rec") in res}
 
+# create dictionary with category names
 names = {str(i): name for name, i in CATEGORIES.items()}  # label id -> vocabulary name
 named = {}
 for k, v in res.items():

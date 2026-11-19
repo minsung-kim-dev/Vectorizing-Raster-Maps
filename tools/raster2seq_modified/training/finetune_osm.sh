@@ -35,7 +35,7 @@ torchrun --nproc_per_node=${NUM_GPUS} --master_port=14159 main_ddp.py \
     --dataset_name=osm \
     --dataset_root="$DATA" \
     --semantic_classes=${SEM_CLASSES} \
-    --job_name= ${JOB} \
+    --job_name="${JOB}" \
     --output_dir "$OUTPUT_DIR" \
     --batch_size ${BATCH_SIZE} \
     --input_channels=3 \
