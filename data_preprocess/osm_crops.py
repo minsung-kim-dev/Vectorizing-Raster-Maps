@@ -56,7 +56,9 @@ def extract(bbox):
         df = df.explode(index_parts=False)  # one row per shape (buildings come grouped per tile)
         df["geometry"] = df.geometry.clip_by_rect(*area)  # clip first, so copies are compared as they'll be saved
         df = df[~df.geometry.is_empty]
-        df = df[~df.geometry.set_precision(0.01, mode="pointwise").normalize().to_wkb().duplicated()]  # repeated shapes
+        kind = df.reindex(columns=["class", "subclass"]).astype(str).agg("/".join, axis=1)
+        # repeated shapes of the same type
+        df = df[~pd.DataFrame({"kind": kind, "shape": df.geometry.set_precision(0.01, mode="pointwise").normalize().to_wkb()}).duplicated().to_numpy()] 
         if len(df):  # some layers have no shapes in a crop
             g = shapely.make_valid(df.geometry.values); a = shapely.area(g)
             kind = df.reindex(columns=["class", "subclass"]).astype(str).agg("/".join, axis=1).to_numpy()

@@ -32,6 +32,8 @@ import json
 import math
 import random
 import sys
+import collections
+import shapely
 import pandas as pd
 from pathlib import Path
 
@@ -99,6 +101,18 @@ def label_for(layer, cls, subclass, geom_type):
     return (LABELS.get((layer, cls, subclass, geom_type)) or LABELS.get((layer, cls, None, geom_type))
             or ("unknown" if geom_type == "polygon" else "unknown_line"))
 
+def merge_lines(out):
+    # join line pieces of the same label that connect end to end (the source splits paths into short pieces)
+    lines = collections.defaultdict(list)
+    for pts, label, geom_type in out:
+        if geom_type == "line":
+            lines[label].append(LineString(pts))
+    out = [x for x in out if x[2] != "line"]
+    for label, ls in lines.items():
+        for merged in shapely.get_parts(shapely.line_merge(shapely.MultiLineString(ls))):
+            out.append((list(merged.coords), label, "line"))
+    return out 
+
 def extract_geometries(data, to_px):
     """(points, label, geom_type) per part; polygons drop the repeated closing point."""
     out = []
@@ -122,10 +136,13 @@ def extract_geometries(data, to_px):
             pts = [to_px(lon, lat) for lon, lat in (part[:-1] if is_poly else part)]
             if len(pts) >= 2 + is_poly:
                 out.append((pts, label, geom_type))
+
     # identical shapes can survive from the source data (e.g. two copies of a large area): keep one of each
     # the same key is jsut replaced when there's a duplicate in terms of the points
-    return list({(label, geom_type, tuple(np.round(pts, 3).ravel())): (pts, label, geom_type)
+    out = list({(label, geom_type, tuple(np.round(pts, 3).ravel())): (pts, label, geom_type)
                  for pts, label, geom_type in out}.values())
+    # merge short lines
+    return merge_lines(out)
 
 
 def make_to_px(data, png_width):
