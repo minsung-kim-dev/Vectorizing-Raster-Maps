@@ -9,7 +9,7 @@ The next few sections describe the setup of the repository, installation, and ho
 
 Skip to the [Training](#training) section to understand how to train and evaluate the models.
 
-*Note: Generative AI is statement [here](#generative)*
+*Note: Generative AI is statement [here](#generative ai statement).*
 
 ## Installation
 
