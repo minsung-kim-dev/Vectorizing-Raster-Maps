@@ -17,6 +17,8 @@ data/teacher_forced_predictions.png
 data/ugly_predictions.png
 *.tar.gz
 *.tsv.gz
+*.err
+*.out
 .DS_Store
 !data/osm_carto_compare/render_carto.py
 osm_data/

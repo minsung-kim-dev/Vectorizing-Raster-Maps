@@ -32,6 +32,8 @@ import json
 import math
 import random
 import sys
+import collections
+import shapely
 import pandas as pd
 from pathlib import Path
 
@@ -73,6 +75,7 @@ if 'unknown' not in VOCAB.keys():
     VOCAB |= {"unknown": []}
 if 'unknown_line' not in VOCAB.keys():
     VOCAB |= {"unknown_line": []}
+print(VOCAB)
 
 # inverts VOCAB mapping so then it is a tuple -> label
 LABELS = {key: label for label, keys in VOCAB.items() for key in keys}
@@ -81,12 +84,36 @@ CATEGORIES = {label: i for i, label in enumerate(VOCAB)}
 SKIP = {  # dropped entirely: (layer, class) or (layer, "*")
     ("transportation_name", "*"), ("water_name", "*"),  # copies of other features, only used to place names
     ("boundary", "*"), ("landuse", "neighbourhood"),      # administrative, not drawn as visible features
+    # not drawn by utils/render_carto.py, so not visible in the images
+    ("aeroway", "*"),                                     # aerodrome, taxiway, apron, runway
+    ("transportation", "bridge"),                         # bridge deck outlines (the road on top is kept)
+    ("transportation", "transit"),                        # subway, light rail
+    ("transportation", "pier"), ("transportation", "busway"),
+    ("transportation", "motorway_construction"), ("transportation", "tertiary_construction"),
+    ("transportation", "service_construction"), ("transportation", "minor_construction"),
+    ("transportation", "path_construction"),
+    ("landuse", "zoo"), ("landuse", "education"), ("landuse", "toilets"),
+    ("mountain_peak", "cliff"),
 }
+# shapes not drawn by utils/render_carto.py, by (layer, class, subclass, geometry)
+SKIP_SHAPES = {("transportation", "path", "platform", "polygon"), ("transportation", "path", "footway", "polygon")}
 
 def label_for(layer, cls, subclass, geom_type):
     """Vocabulary label for an OpenMapTiles feature, else "unknown"/"unknown_line"."""
     return (LABELS.get((layer, cls, subclass, geom_type)) or LABELS.get((layer, cls, None, geom_type))
             or ("unknown" if geom_type == "polygon" else "unknown_line"))
+
+def merge_lines(out):
+    # join line pieces of the same label that connect end to end (the source splits paths into short pieces)
+    lines = collections.defaultdict(list)
+    for pts, label, geom_type in out:
+        if geom_type == "line":
+            lines[label].append(LineString(pts))
+    out = [x for x in out if x[2] != "line"]
+    for label, ls in lines.items():
+        for merged in shapely.get_parts(shapely.line_merge(shapely.MultiLineString(ls))):
+            out.append((list(merged.coords), label, "line"))
+    return out 
 
 def extract_geometries(data, to_px):
     """(points, label, geom_type) per part; polygons drop the repeated closing point."""
@@ -102,6 +129,8 @@ def extract_geometries(data, to_px):
             continue
         # extract the actual geometry based on teh dictionary defined above
         geom_type, parts = PARTS[g["type"]](g["coordinates"])
+        if (layer, cls, subclass, geom_type) in SKIP_SHAPES:
+            continue
         label = label_for(layer, cls, subclass, geom_type)
         is_poly = geom_type == "polygon"
         for part in parts:
@@ -111,7 +140,13 @@ def extract_geometries(data, to_px):
             pts = [to_px(lon, lat) for lon, lat in (part[:-1] if is_poly else part)]
             if len(pts) >= 2 + is_poly:
                 out.append((pts, label, geom_type))
-    return out
+
+    # identical shapes can survive from the source data (e.g. two copies of a large area): keep one of each
+    # the same key is jsut replaced when there's a duplicate in terms of the points
+    out = list({(label, geom_type, tuple(np.round(pts, 3).ravel())): (pts, label, geom_type)
+                 for pts, label, geom_type in out}.values())
+    # merge short lines
+    return merge_lines(out)
 
 
 def make_to_px(data, png_width):
@@ -123,7 +158,7 @@ def make_to_px(data, png_width):
     x0, y0, x1, _ = pixel_window(data["bbox"], zoom)
     # get scaling ratio
     scale = png_width / (x1 - x0) # should be 2
-    print(f'Scale is: {scale}')
+    #print(f'Scale is: {scale}')
 
     # conversion with specific values pre-set
     def to_px(lon, lat):
@@ -266,11 +301,20 @@ def main(args):
             # simplifies, clips, drops small geometries 
             anns = build_annotations(geoms, w, h, args.min_area, args.simplify_tol, args.min_line_length, 
                                         img_id, ann_id)
+            
+            # identical once clipped to the image: keep one of each
+            anns = list({(a["category_id"], tuple(np.round(a["segmentation"][0], 2))): a for a in anns}.values())
+            if not anns:  # drop empty crops
+                coco["images"].pop()                 # remove the entry just added for it
+                (out / split / png.name).unlink()    # and its saved PNG
+                continue
+            for k, a in enumerate(anns):  # renumber so ids stay consecutive and unique
+                a["id"] = ann_id + k
             coco["annotations"] += anns
             ann_id += len(anns)
         with open(out / "annotations" / f"{split}.json", "w") as fh:
             json.dump(coco, fh, default=convert_numpy_to_python)
-        print(f"{split}: {len(split_files)} images, {len(coco['annotations'])} annotations")
+        print(f"{split}: {len(coco['images'])} images, {len(coco['annotations'])} annotations")
 
     print("categories:", CATEGORIES)
     print("# of categories:", len(CATEGORIES))
