@@ -2,10 +2,10 @@
 # Raster2Seq training pipeline for the OSM crops, modeled on Raster2Seq's tools/train_cc5k.sh
 # (stage 1, shapes only). OSM lines are converted to polygons using a 2 px buffer.
 #
-# Usage (in the raster2seq env):  bash tools/raster2seq_original/train_osm_original.sh
+# Usage (in the raster2seq env):  bash tools/raster2seq_original/training/train_osm_original.sh
 set -euo pipefail
 
-REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 R2S=${R2S:-$REPO/../Raster2Seq}
 CROPS=${CROPS:-$REPO/crops}
 DATA=${DATA:-$REPO/data/coco_osm_flushing_buffer}

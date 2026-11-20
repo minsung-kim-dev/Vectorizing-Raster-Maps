@@ -180,7 +180,7 @@ All training of the Raster2Seq models is done via bash scripts stored in `tools/
 
 **Original Raster2Seq**
 
-1. `tools/raster2seq_original/train_osm_original.sh`: stage 1 for the original Raster2Seq model, which learns to predict polygon outlines without semantic labels.
+1. `tools/raster2seq_original/training/train_osm_original.sh`: stage 1 for the original Raster2Seq model, which learns to predict polygon outlines without semantic labels.
 
 **Modified Raster2Seq**
 
