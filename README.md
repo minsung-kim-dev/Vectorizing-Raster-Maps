@@ -178,6 +178,13 @@ Importantly, all training and evaluation functions call methods directly from Ra
 
 All training of the Raster2Seq models is done via bash scripts stored in `tools/`. We separate scripts into model-specific folders and differentiate between training and evaluation. Raster2Seq is trained in two stages: `train_*.sh` scripts implement the first stage of training while `finetune_*.sh` implement the second stage.
 
+**Original Raster2Seq**
+
+1. `tools/raster2seq_original/train_osm_original.sh`: stage 1 for the original Raster2Seq model, which learns to predict polygon outlines without semantic labels.
+
+**Modified Raster2Seq**
+
+
 1. `tools/train_osm.sh`: stage 1 for the modified Raster2Seq model, which learns shapes only (polygon vs. line).
 2. `tools/finetune_osm.sh`: stage 2, starts from stage 1 and learns the semantic labels along with an additional attention head.
 
