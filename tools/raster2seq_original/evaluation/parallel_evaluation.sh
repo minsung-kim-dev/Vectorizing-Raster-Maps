@@ -5,8 +5,8 @@ set -euo pipefail
 cd "$(dirname "$0")/../../.."
 export PYTHONPATH=$PWD
 
-JOB=${1:-osm_buffer_flushing_200_fresh_01}
-DATA=${2:-data/coco_osm_flushing_buffer}
+JOB=${1:-r2s_original_stage1}
+DATA=${2:-data/coco_osm_buffer}
 SPLIT=${3:-test}
 K=${4:-4}
 CKPT=${CKPT:-${OUTPUT_DIR:-save_models}/$JOB/checkpoint0199.pth}
@@ -14,8 +14,8 @@ OUT=${OUT:-eval_outputs/$JOB/$SPLIT}
 
 MODEL=(--dataset_name=osm --per_token_sem_loss --input_channels 3
        --converter_version v3
-       --image_size 512 --poly2seq --seq_len 1024 --num_bins 32
-       --disable_poly_refine --dec_attn_concat_src --use_anchor --ema4eval)
+       --image_size 256 --poly2seq --seq_len 512 --num_bins 32
+       --disable_poly_refine --dec_attn_concat_src --use_anchor --ema4eval --min_poly_area 25 --filter_gt_by_area)
 
 SHARDS=$(mktemp -d); trap 'rm -rf "$SHARDS"' EXIT
 for k in $(seq 0 $((K - 1))); do
