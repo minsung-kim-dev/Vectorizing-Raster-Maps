@@ -2,9 +2,15 @@
 
 Jennah Gosciak (jrg377), Minsung Kim (mk2797), Sunishka Sil (ss4469)
 
-The next few sections describe the setup of the repository, installation, and how to work with a virtual machine using Google Cloud. Note: many of the methods in this repository rely on an updated version of a [forked Raster2Seq repository](https://github.com/jennahgosciak/Raster2Seq).
+The next few sections describe the setup of the repository, installation, and how to work with a virtual machine using Google Cloud. Note: many of the methods in this repository rely on an updated version of a [forked Raster2Seq repository](https://github.com/jennahgosciak/Raster2Seq). To see the diff between the two `master` branches, check [here](https://github.com/Cornell-VAILab/Raster2Seq/compare/Cornell-VAILab:master..jennahgosciak:master).
+
+**Proposed architecture changes/contribution:** A high level overview of our decoder architecture (contrasted with the original Raster2Seq architecture) is shown here. These changes have been made directly to the forked repository shown above.
+
+![diagram of raster2seq](diagrams/diagram_combined.png)
 
 Skip to the [Training](#training) section to understand how to train and evaluate the models.
+
+*Note: Generative AI is statement [here](#generative-ai-statement).*
 
 ## Installation
 
@@ -172,6 +178,13 @@ Importantly, all training and evaluation functions call methods directly from Ra
 
 All training of the Raster2Seq models is done via bash scripts stored in `tools/`. We separate scripts into model-specific folders and differentiate between training and evaluation. Raster2Seq is trained in two stages: `train_*.sh` scripts implement the first stage of training while `finetune_*.sh` implement the second stage.
 
+**Original Raster2Seq**
+
+1. `tools/raster2seq_original/training/train_osm_original.sh`: stage 1 for the original Raster2Seq model, which learns to predict polygon outlines without semantic labels.
+
+**Modified Raster2Seq**
+
+
 1. `tools/train_osm.sh`: stage 1 for the modified Raster2Seq model, which learns shapes only (polygon vs. line).
 2. `tools/finetune_osm.sh`: stage 2, starts from stage 1 and learns the semantic labels along with an additional attention head.
 
@@ -184,3 +197,6 @@ The color-threshold baseline does not need explicit training and can be found in
 - `create_latex_table.py`: turns the results into LaTeX tables that we can paste into the report.
 
 The color threshold baseline has its own evaluation script `eval_baseline.py`.
+
+### Generative AI Statement
+Claude Code (Opus 5.5) and ChatGPT (GPT 6.2 Astra) assisted with writing code and debugging errors.
