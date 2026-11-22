@@ -18,7 +18,7 @@ CLS_COEFF=5
 COO_COEFF=20
 CONVERTER=v3
 NUM_GPUS=1
-BATCH_SIZE=12      # lower if the GPU runs out of memory
+BATCH_SIZE=8      # lower if the GPU runs out of memory
 EPOCHS=200
 JOB="osm_stage_queens4000_pretrain_small"
 

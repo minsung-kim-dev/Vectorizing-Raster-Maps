@@ -14,14 +14,21 @@ NUM_GPUS=1
 BATCH_SIZE=8
 EPOCHS=30         # short runs: enough to rank the settings, not to finish training
 EVAL_EVERY=10     # 3 validation runs per setting
+SEQ_LENGTH=512
+IMG_SIZE=256
 
 # name  lr  cls_loss_coef  coords_loss_coef  label_smoothing
 CONFIGS=(
-    "base      2e-4  5   20  0.1"
-    "lr1e-4    1e-4  5   20  0.1"
-    "lr5e-4    5e-4  5   20  0.1"
-    "coords40  2e-4  5   40  0.1"
-    "smooth0   2e-4  5   20  0.0"
+    "base           2e-4  5   20  0.1    0.08   cc5k"
+    "lr5e-5         5e-5  5   20  0.1    0.08   cc5k"
+    "lr1e-4         1e-4  5   20  0.1    0.08   cc5k"
+    "lr5e-4         5e-4  5   20  0.1    0.08   cc5k"
+    "coords10       2e-4  5   10  0.1    0.08   cc5k"
+    "coords40       2e-4  5   40  0.1    0.08   cc5k"
+    "smooth0        2e-4  5   20  0.0    0.08   cc5k"
+    "rowtol2x       2e-4  5   20  0.1    0.16   cc5k"
+    "rowtol0.04     2e-4  5   20  0.1    0.04   cc5k"
+    "scratch        2e-4  5   20  0.1    0.08   none"
 )
 
 cd "$R2S"
@@ -29,9 +36,10 @@ mkdir -p wandb_keys && touch "wandb_keys/$(whoami)_wandb.key"
 PRETRAIN=$(python -c "from raster2seq_hub import download_checkpoint; print(download_checkpoint('cubicasa5k'))")
 
 for cfg in "${CONFIGS[@]}"; do
-    read -r NAME LR CLS COO SMOOTH <<< "$cfg"
-    JOB="osm_stage1_sweep_${NAME}"
-    echo "==== $JOB: lr $LR, cls $CLS, coords $COO, smoothing $SMOOTH ===="
+    read -r NAME LR CLS COO SMOOTH TOL PRE <<< "$cfg"
+    START=(); [[ $PRE == cc5k ]] && START=(--start_from_checkpoint "$PRETRAIN")
+    JOB="osm_stage1_small_sweep_${NAME}"
+    echo "==== $JOB: lr $LR, cls $CLS, coords $COO, smoothing $SMOOTH tolerance $TOL ===="
     torchrun --nproc_per_node=${NUM_GPUS} --master_port=14159 main_ddp.py \
         --dataset_name=osm \
         --dataset_root="$DATA" \
@@ -44,10 +52,10 @@ for cfg in "${CONFIGS[@]}"; do
         --output_dir "$OUTPUT_DIR" \
         --batch_size ${BATCH_SIZE} \
         --input_channels=3 \
-        --image_size 512 \
+        --image_size ${IMG_SIZE} \
         --poly2seq \
-        --seq_len 1024 \
-        --row_tolerance 0.08 \
+        --seq_len ${SEQ_LEN} \
+        --row_tolerance ${TOL} \
         --num_bins 32 \
         --ckpt_every_epoch=${EVAL_EVERY} \
         --eval_every_epoch=${EVAL_EVERY} \
@@ -64,5 +72,5 @@ for cfg in "${CONFIGS[@]}"; do
         --dec_attn_concat_src \
         --converter_version v3 \
         --use_anchor \
-        --start_from_checkpoint "$PRETRAIN"
+        "${START[@]}"
 done
