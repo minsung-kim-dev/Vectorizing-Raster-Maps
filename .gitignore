@@ -15,6 +15,8 @@ data/nyc_nta_2020.geojson
 data_plots/
 data/teacher_forced_predictions.png
 data/ugly_predictions.png
+local_models/
+model*diagram*.pdf
 *.gpkg
 *.gpkg*
 *.tar.gz
