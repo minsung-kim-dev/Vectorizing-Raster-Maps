@@ -14,9 +14,9 @@ R2S=${R2S:-$REPO/../Raster2Seq}
 DATA=${DATA:-/share/garg/jrg377/coco_osm_fixed}
 OUTPUT_DIR=${OUTPUT_DIR:-/share/garg/jrg377/osm_stage2_checkpoints}
 
-FROM_JOB=osm_stage2_queens_4000pretrain_smallv2   # the earlier run
-FROM_CKPT=checkpoint0099.pth                       # saved at the end of epoch 100, before its drop
-JOB=${FROM_JOB}_nodrop
+STAGE1=/share/garg/jrg377/osm_stage1_checkpoints/osm_stage_queens4000_pretrain_smallv2/checkpoint.pth   # final stage 1 weights
+JOB=osm_stage2_queens_4000pretrain_nodrop
+EPOCHS=400
 
 IMAGE_SIZE=256
 SEQ_LEN=512
@@ -27,17 +27,9 @@ COO_COEFF=20
 SEM_COEFF=1
 CONVERTER=v3
 NUM_GPUS=1
-BATCH_SIZE=12     # same as the earlier run (the optimizer state comes from it)
-EPOCHS=400        # total: continues at epoch 100, so 300 more
+BATCH_SIZE=12
 # vocabulary size + 1 (Raster2Seq reserves the last class), read from create_coco_osm.py
 SEM_CLASSES=$(cd "$REPO" && python -c "from data_preprocess.create_coco_osm import CATEGORIES; print(len(CATEGORIES) + 1)")
-
-# start the new run from the old checkpoint, only the first time: after a preemption, checkpoint.pth holds
-# this run's latest epoch and must not be replaced
-mkdir -p "$OUTPUT_DIR/$JOB"
-if [[ ! -f "$OUTPUT_DIR/$JOB/checkpoint.pth" ]]; then
-    cp "$OUTPUT_DIR/$FROM_JOB/$FROM_CKPT" "$OUTPUT_DIR/$JOB/checkpoint.pth"
-fi
 
 cd "$R2S"
 torchrun --nproc_per_node=${NUM_GPUS} --master_port=14159 main_ddp.py \
@@ -72,4 +64,6 @@ torchrun --nproc_per_node=${NUM_GPUS} --master_port=14159 main_ddp.py \
     --add_geom_head \
     --geom_mask \
     --sem_attn \
-    --disable_wd_as_line
+    --disable_wd_as_line \
+    --start_from_checkpoint "${STAGE1}"
+
