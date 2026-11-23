@@ -20,11 +20,11 @@ also include source_geom_type to record whether the original geometry was a line
 #
 # Convert one crop without buffering (keep line features as lines):
 # python data_preprocess/create_coco_osm.py --data_root crops \
-#   --output data/coco_osm_no_buffer --sample_name queens_05319
+#   --output data/coco_osm_no_buffer
 #
 # Convert the same crop with a 2-pixel line buffer radius:
 # python data_preprocess/create_coco_osm.py --data_root crops \
-#   --output data/coco_osm_buffer --sample_name queens_05319 --line_buffer_px 2
+#   --output data/coco_osm_buffer --line_buffer_px 10.8
 
 import argparse
 import gzip
