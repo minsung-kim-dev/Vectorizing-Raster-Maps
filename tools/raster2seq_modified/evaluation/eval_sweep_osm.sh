@@ -15,6 +15,7 @@ DATA=${DATA:-/share/garg/jrg377/coco_osm_fixed}
 RUNS_DIR=${RUNS_DIR:-/share/garg/jrg377/osm_tuning}      # sweep_osm.sh's OUTPUT_DIR
 EVAL_DIR=${EVAL_DIR:-$RUNS_DIR/eval_val}                 # results: $EVAL_DIR/<run>.json
 SPLIT=val
+P=${P:-4}                                                # evaluations at a time
 
 # the sweep's runs (job names without the osm_stage1_tuning_ prefix)
 RUNS=(base base1 base2 lr5e-4 lr5e-4_1 lr5e-4_2 coords40 coords40_1 coords40_2 rowtol2x rowtol2x_1 rowtol2x_2
@@ -25,11 +26,23 @@ MODEL=(--dataset_name=osm --semantic_classes=3 --geom_classes --per_token_sem_lo
        --image_size 256 --poly2seq --seq_len 512 --num_bins 32 --converter_version v3
        --disable_poly_refine --dec_attn_concat_src --use_anchor --ema4eval)
 
+evaluate() {  # one run: eval.py writes to a temporary folder; keep results.txt (and the log if it fails)
+    local run=$1 tmp
+    tmp=$(mktemp -d)
+    if python eval.py --checkpoint "$RUNS_DIR/osm_stage1_tuning_$run/checkpoint.pth" --dataset_root "$DATA" \
+        --eval_set "$SPLIT" --output_dir "$tmp" "${MODEL[@]}" --plot_pred '' --plot_density '' --plot_gt '' \
+        --batch_size 32 --filter_gt_by_area --min_poly_area 25 > "$tmp/log.txt" 2>&1; then
+        cp "$tmp/results.txt" "$EVAL_DIR/$run.json"; echo "done: $run"
+    else
+        cp "$tmp/log.txt" "$EVAL_DIR/$run.failed.log"; echo "FAILED: $run (see $EVAL_DIR/$run.failed.log)"
+    fi
+    rm -rf "$tmp"
+}
+
 mkdir -p "$EVAL_DIR"
 cd "$R2S"
 for run in "${RUNS[@]}"; do
-    ckpt="$RUNS_DIR/osm_stage1_tuning_$run/checkpoint.pth"
-    if [[ ! -f "$ckpt" ]]; then echo "skip $run: no checkpoint"; continue; fi
+    if [[ ! -f "$RUNS_DIR/osm_stage1_tuning_$run/checkpoint.pth" ]]; then echo "skip $run: no checkpoint"; continue; fi
     if [[ -f "$EVAL_DIR/$run.json" ]]; then echo "skip $run: already evaluated"; continue; fi
     echo "==== $run"
     tmp=$(mktemp -d)  # eval.py's output folder; only its results.txt is kept
@@ -41,6 +54,7 @@ for run in "${RUNS[@]}"; do
     fi
     rm -rf "$tmp"
 done
+wait
 
 # one table: each run's metrics, then the mean / std over seeds of each setting
 python - "$EVAL_DIR" <<'EOF'

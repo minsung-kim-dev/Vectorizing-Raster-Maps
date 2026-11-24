@@ -16,8 +16,8 @@ import sys
 from PIL import Image
 
 p = argparse.ArgumentParser()
-p.add_argument("--lat", type=float, default=40.755265)
-p.add_argument("--lon", type=float, default=-73.955766)
+p.add_argument("--lat", type=float, default=40.755967)
+p.add_argument("--lon", type=float, default=-73.955262)
 p.add_argument("--cols", type=int, default=2)
 p.add_argument("--rows", type=int, default=3)
 p.add_argument("--side", type=float, default=125, help="crop side, meters (training crops: 125)")
