@@ -3,6 +3,8 @@ one JSON line per epoch: train_* every epoch, test_* = validation every --eval_e
 
 One panel per loss (they have different scales): the weighted total, then each part unscaled. A second figure,
 metrics.png, shows the validation precision, recall and F1 per shape type (training computes no such metrics).
+With --rescored, metrics.png uses eval_outputs/<job>/by_epoch/<epoch>.json from rescore_checkpoints.sh (the saved
+checkpoints scored with the current eval.py) instead of the scores logged during training.
 
 Usage (from the repo root):
   python tools/raster2seq_modified/training/plot_losses.py /share/garg/jrg377/osm_tuning/osm_stage1_tuning_coords40
@@ -10,6 +12,7 @@ Usage (from the repo root):
   --out to choose another folder)
 """
 import argparse
+import glob
 import json
 import os
 
@@ -40,6 +43,8 @@ METRICS = {  # log key (after test_, before _prec / _rec) -> panel title
 ap = argparse.ArgumentParser()
 ap.add_argument("run", help="run folder (output dir + job name), containing log.txt")
 ap.add_argument("--out", help="folder for the figures (default: eval_outputs/<job>)")
+ap.add_argument("--rescored", action="store_true",
+                help="validation scores from eval_outputs/<job>/by_epoch/*.json (rescore_checkpoints.sh), not log.txt")
 a = ap.parse_args()
 
 df = pd.DataFrame([json.loads(line) for line in open(os.path.join(a.run, "log.txt")) if line.strip()])
@@ -75,7 +80,14 @@ fig.tight_layout()
 fig.savefig(os.path.join(out, "losses.png"), dpi=150)
 
 # validation precision / recall / F1, one panel per shape type (rows with validation only)
-val = df.dropna(subset=["test_room_prec"])
+if a.rescored:  # <epoch>.json: eval.py's results, keys without the test_ prefix
+    files = glob.glob(os.path.join("eval_outputs", job, "by_epoch", "*.json"))
+    assert files, f"no eval_outputs/{job}/by_epoch/*.json: run rescore_checkpoints.sh first"
+    val = pd.DataFrame([{"epoch": int(os.path.basename(f)[:-5]),
+                         **{f"test_{k}": v for k, v in json.load(open(f)).items() if isinstance(v, float)}}
+                        for f in files]).sort_values("epoch")
+else:
+    val = df.dropna(subset=["test_room_prec"])
 panels = [k for k in METRICS if f"test_{k}_prec" in val]
 fig, axes = plt.subplots(1, len(panels), figsize=(3.4 * len(panels), 3.4), squeeze=False, sharey=True)
 for ax, k in zip(axes[0], panels):
@@ -87,5 +99,6 @@ axes[0][0].set_ylabel("Validation score")
 axes[0][0].legend(frameon=False)
 fig.suptitle(job, x=0.01, ha="left", fontsize=11)
 fig.tight_layout()
+fig.suptitle(job + (" (rescored)" if a.rescored else ""), x=0.01, ha="left", fontsize=11)
 fig.savefig(os.path.join(out, "metrics.png"), dpi=150)
 print("wrote", os.path.join(out, "losses.png"), "and metrics.png")
