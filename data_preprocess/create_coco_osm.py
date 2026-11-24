@@ -75,7 +75,6 @@ if 'unknown' not in VOCAB.keys():
     VOCAB |= {"unknown": []}
 if 'unknown_line' not in VOCAB.keys():
     VOCAB |= {"unknown_line": []}
-print(VOCAB)
 
 # inverts VOCAB mapping so then it is a tuple -> label
 LABELS = {key: label for label, keys in VOCAB.items() for key in keys}
