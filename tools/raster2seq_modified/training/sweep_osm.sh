@@ -32,16 +32,16 @@ IMG_SIZE=256
 # )
 
 CONFIGS=(
-    "base1              2e-4  5   20  0.1    0.08   cc5k     1"
-    "base2              2e-4  5   20  0.1    0.08   cc5k     2"
-    "lr5e-4_1           5e-4  5   20  0.1    0.08   cc5k     1"
-    "lr5e-4_2           5e-4  5   20  0.1    0.08   cc5k     2"
-    "coords40_1         2e-4  5   40  0.1    0.08   cc5k     1"
-    "coords40_2         2e-4  5   40  0.1    0.08   cc5k     2"
-    "rowtol2x_1         2e-4  5   20  0.1    0.16   cc5k     1"
-    "rowtol2x_2         2e-4  5   20  0.1    0.16   cc5k     2"
-    "coords60_1         2e-4  5   60  0.1    0.08   cc5k     1"
-    "coords60_2         2e-4  5   60  0.1    0.08   cc5k     2"
+    # "base1              2e-4  5   20  0.1    0.08   cc5k     1"
+    # "base2              2e-4  5   20  0.1    0.08   cc5k     2"
+    # "lr5e-4_1           5e-4  5   20  0.1    0.08   cc5k     1"
+    # "lr5e-4_2           5e-4  5   20  0.1    0.08   cc5k     2"
+    # "coords40_1         2e-4  5   40  0.1    0.08   cc5k     1"
+    # "coords40_2         2e-4  5   40  0.1    0.08   cc5k     2"
+    # "rowtol2x_1         2e-4  5   20  0.1    0.16   cc5k     1"
+    # "rowtol2x_2         2e-4  5   20  0.1    0.16   cc5k     2"
+    # "coords60_1         2e-4  5   60  0.1    0.08   cc5k     1"
+    # "coords60_2         2e-4  5   60  0.1    0.08   cc5k     2"
     "coords40Xrow2x_1   2e-4  5   40  0.1    0.16   cc5k     1"
     "coords40Xrow2x_2   2e-4  5   40  0.1    0.16   cc5k     2"
 )

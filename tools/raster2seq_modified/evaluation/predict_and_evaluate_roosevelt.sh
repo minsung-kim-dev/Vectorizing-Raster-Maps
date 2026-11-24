@@ -3,11 +3,13 @@
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
 export PYTHONPATH=$PWD
-JOB=${1:-test_flushing_patches}
-# DATA=${2:-/share/garg/jrg377/coco_roosevelt}
-DATA=${2:-/share/garg/jrg377/coco_flushing_grid}
-SPLIT=${3:-test}
+# JOB=${1:-test_flushing_patches}
+JOB=${1:-test_roosevelt_patches}
+DATA=${2:-/share/garg/jrg377/coco_roosevelt}
+# DATA=${2:-/share/garg/jrg377/coco_flushing_grid}
+SPLIT=${3:-train}
 CKPT=${CKPT:-/share/garg/jrg377/osm_stage2_checkpoints/osm_stage2_queens_4000pretrain_smallv2/checkpoint0399.pth}
+# CKPT=${CKPT:-/share/garg/jrg377/osm_stage2_checkpoints/osm_stage2_queens_4000pretrain_nodrop/checkpoint.pth}
 SEMANTIC_CLASSES=$(python -c "from data_preprocess.create_coco_osm import CATEGORIES; print(len(CATEGORIES) + 1)")
 
 MODEL=(--dataset_name=osm --semantic_classes=$SEMANTIC_CLASSES --per_token_sem_loss --input_channels 3

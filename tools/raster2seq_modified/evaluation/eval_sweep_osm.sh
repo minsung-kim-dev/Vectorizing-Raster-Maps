@@ -5,6 +5,8 @@
 # temporary folder that is deleted afterwards.
 #
 # Usage (in the raster2seq env, on a GPU node):  bash tools/raster2seq_modified/evaluation/eval_sweep_osm.sh
+ulimit -n "$(ulimit -Hn)"
+
 set -euo pipefail
 
 REPO=$(cd "$(dirname "$0")/../../.." && pwd)
@@ -16,7 +18,7 @@ SPLIT=val
 
 # the sweep's runs (job names without the osm_stage1_tuning_ prefix)
 RUNS=(base base1 base2 lr5e-4 lr5e-4_1 lr5e-4_2 coords40 coords40_1 coords40_2 rowtol2x rowtol2x_1 rowtol2x_2
-      coords60_1 coords60_2 coords40Xrow2x_1 coords40Xrow2x_2 rowtol0.04 smooth0 lr1e-4 coords10 lr5e-5)
+      coords60_1 coords60_2 coords40Xrow2x_1 coords40Xrow2x_2 rowtol0.04 smooth0 lr1e-4 coords10 lr5e-5 scratch)
 
 # the stage 1 model settings, as in sweep_osm.sh (row tolerance and loss weights only matter for training)
 MODEL=(--dataset_name=osm --semantic_classes=3 --geom_classes --per_token_sem_loss --input_channels 3
@@ -32,7 +34,7 @@ for run in "${RUNS[@]}"; do
     echo "==== $run"
     tmp=$(mktemp -d)  # eval.py's output folder; only its results.txt is kept
     if python eval.py --checkpoint "$ckpt" --dataset_root "$DATA" --eval_set "$SPLIT" --output_dir "$tmp" "${MODEL[@]}" \
-        --plot_pred '' --plot_density '' --plot_gt ''; then
+        --plot_pred '' --plot_density '' --plot_gt '' --batch_size 32  --num_workers 0 --filter_gt_by_area --min_poly_area 25; then
         cp "$tmp/results.txt" "$EVAL_DIR/$run.json"
     else
         echo "FAILED: $run"
