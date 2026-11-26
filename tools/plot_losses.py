@@ -22,8 +22,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import pandas as pd  # noqa: E402
 
-TRAIN, VAL = "#2a78d6", "#eb6834"  # categorical slots 1-2 (blue, orange)
-PREC, REC, F1 = "#2a78d6", "#eb6834", "#1baf7a"  # categorical slots 1-3 (blue, orange, aqua)
+TRAIN, VAL = '#E69F00', '#56B4E9'
+PREC, REC, F1 = '#E69F00', '#56B4E9', '#009E73'
 LOSSES = {  # log key (after train_ / test_) -> panel title
     "loss": "Total loss (weighted)",
     "loss_ce_unscaled": "Token type (corner / separator / end)",
@@ -41,20 +41,21 @@ METRICS = {  # log key (after test_, before _prec / _rec) -> panel title
 }
 
 ap = argparse.ArgumentParser()
-ap.add_argument("run", help="run folder (output dir + job name), containing log.txt")
-ap.add_argument("--out", help="folder for the figures (default: eval_outputs/<job>)")
+ap.add_argument("run", help="where to get log.txt files")
+ap.add_argument("--out", help="folder for where to store plot")
+ap.add_argument("--job", help="jobname")
 ap.add_argument("--rescored", action="store_true",
-                help="validation scores from eval_outputs/<job>/by_epoch/*.json (rescore_checkpoints.sh), not log.txt")
+                help="validation scores from eval_outputs/<job>/by_epoch/*.json")
 a = ap.parse_args()
 
+# load log files as dataframe
 df = pd.DataFrame([json.loads(line) for line in open(os.path.join(a.run, "log.txt")) if line.strip()])
 df = df.drop_duplicates("epoch", keep="last").sort_values("epoch")  # a resumed run can repeat epochs
 df["epoch"] += 1  # log counts from 0
+# filter
 panels = [k for k in LOSSES if f"train_{k}" in df]
 
-job = os.path.basename(os.path.normpath(a.run))
-out = a.out or os.path.join("eval_outputs", job)
-os.makedirs(out, exist_ok=True)
+os.makedirs(a.out, exist_ok=True)
 
 
 def style(ax, title):
@@ -75,13 +76,13 @@ for ax, k in zip(axes[0], panels):
     style(ax, LOSSES[k])
 axes[0][0].set_ylabel("Loss")
 axes[0][0].legend(frameon=False)
-fig.suptitle(job, x=0.01, ha="left", fontsize=11)
+# fig.suptitle(job, x=0.01, ha="left", fontsize=11)
 fig.tight_layout()
-fig.savefig(os.path.join(out, "losses.png"), dpi=150)
+fig.savefig(os.path.join(a.out, "losses.png"), dpi=150)
 
 # validation precision / recall / F1, one panel per shape type (rows with validation only)
 if a.rescored:  # <epoch>.json: eval.py's results, keys without the test_ prefix
-    files = glob.glob(os.path.join("eval_outputs", job, "by_epoch", "*.json"))
+    files = glob.glob(os.path.join("eval_outputs", a.job, "by_epoch", "*.json"))
     assert files, f"no eval_outputs/{job}/by_epoch/*.json: run rescore_checkpoints.sh first"
     val = pd.DataFrame([{"epoch": int(os.path.basename(f)[:-5]),
                          **{f"test_{k}": v for k, v in json.load(open(f)).items() if isinstance(v, float)}}
@@ -95,10 +96,8 @@ for ax, k in zip(axes[0], panels):
     for y, color, name in ((p, PREC, "Precision"), (r, REC, "Recall"), (2 * p * r / (p + r), F1, "F1")):
         ax.plot(val.epoch, y, color=color, lw=2, marker="o", ms=5, label=name)
     style(ax, METRICS[k])
-axes[0][0].set_ylabel("Validation score")
+axes[0][0].set_ylabel("Validation metrics")
 axes[0][0].legend(frameon=False)
-fig.suptitle(job, x=0.01, ha="left", fontsize=11)
 fig.tight_layout()
-fig.suptitle(job + (" (rescored)" if a.rescored else ""), x=0.01, ha="left", fontsize=11)
-fig.savefig(os.path.join(out, "metrics.png"), dpi=150)
-print("wrote", os.path.join(out, "losses.png"), "and metrics.png")
+fig.savefig(os.path.join(a.out, "metrics.png"), dpi=150)
+print("wrote", os.path.join(a.out, "losses.png"), "and metrics.png")

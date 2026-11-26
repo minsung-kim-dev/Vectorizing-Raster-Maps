@@ -14,20 +14,21 @@ R2S=${R2S:-$REPO/../Raster2Seq}
 DATA=${DATA:-/share/garg/jrg377/coco_osm_fixed}
 OUTPUT_DIR=${OUTPUT_DIR:-/share/garg/jrg377/osm_stage2_checkpoints}
 
-STAGE1=/share/garg/jrg377/osm_stage1_checkpoints/osm_stage_queens4000_pretrain_smallv2/checkpoint.pth   # final stage 1 weights
-JOB=osm_stage2_queens_4000pretrain_nodrop
-EPOCHS=400
+# final stage 1 weights: update!
+STAGE1=/share/garg/jrg377/osm_stage1_checkpoints/osm_stage_queens4000_pretrain_tuned/checkpoint.pth   
+JOB=osm_stage2_queens_4000pretrain_tuned
+EPOCHS=500
 
 IMAGE_SIZE=256
 SEQ_LEN=512
 NUM_BINS=32
 ROW_TOL=0.08
 CLS_COEFF=5
-COO_COEFF=20
-SEM_COEFF=1
+COO_COEFF=40
+SEM_COEFF=2
 CONVERTER=v3
 NUM_GPUS=1
-BATCH_SIZE=12
+BATCH_SIZE=8
 # vocabulary size + 1 (Raster2Seq reserves the last class), read from create_coco_osm.py
 SEM_CLASSES=$(cd "$REPO" && python -c "from data_preprocess.create_coco_osm import CATEGORIES; print(len(CATEGORIES) + 1)")
 
@@ -45,11 +46,11 @@ torchrun --nproc_per_node=${NUM_GPUS} --master_port=14159 main_ddp.py \
     --seq_len ${SEQ_LEN} \
     --row_tolerance ${ROW_TOL} \
     --num_bins ${NUM_BINS} \
-    --ckpt_every_epoch=10 \
+    --ckpt_every_epoch=50 \
     --eval_every_epoch=50 \
     --label_smoothing 0.1 \
     --epochs ${EPOCHS} \
-    --lr_drop '' \
+    --lr_drop '400' \
     --cls_loss_coef ${CLS_COEFF} \
     --coords_loss_coef ${COO_COEFF} \
     --room_cls_loss_coef ${SEM_COEFF} \

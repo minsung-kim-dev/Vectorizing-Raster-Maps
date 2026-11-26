@@ -14,7 +14,10 @@ OUTPUT_DIR=${OUTPUT_DIR:-/share/garg/jrg377/osm_stage2_checkpoints}
 
 
 IMAGE_SIZE=256   
-SEQ_LEN=512      
+SEQ_LEN=512  
+# IMAGE_SIZE=512   
+# SEQ_LEN=1024
+
 NUM_BINS=32       # matches Raster2Seq's CubiCasa checkpoint
 ROW_TOL=0.08      # shape order: rows 8% of the image height, top to bottom, left to right (needs the fork)
 CLS_COEFF=5
@@ -23,8 +26,9 @@ SEM_COEFF=1
 CONVERTER=v3
 NUM_GPUS=1
 BATCH_SIZE=8      # lower if the GPU runs out of memory
-EPOCHS=400
-JOB=osm_stage2_queens_4000pretrain_smallv2
+EPOCHS=200
+# JOB=osm_stage2_queens_4000_512px1024seq
+JOB=osm_stage2_queens_4000_gray
 # vocabulary size + 1 (Raster2Seq reserves the last class), read from create_coco_osm.py
 SEM_CLASSES=$(cd "$REPO" && python -c "from data_preprocess.create_coco_osm import CATEGORIES; print(len(CATEGORIES) + 1)")
 
@@ -64,6 +68,6 @@ torchrun --nproc_per_node=${NUM_GPUS} --master_port=14159 main_ddp.py \
     --geom_mask \
     --sem_attn \
     --disable_wd_as_line \
-    --start_from_checkpoint "/share/garg/jrg377/osm_stage1_checkpoints/osm_stage_queens4000_pretrain_smallv2/checkpoint0199.pth"
+    --start_from_checkpoint "/share/garg/jrg377/osm_stage1_checkpoints/osm_stage_queens4000_gray/checkpoint0199.pth"
 
     # --start_from_checkpoint "/share/garg/jrg377/osm_stage_queens4000_pretrain/checkpoint.pth"

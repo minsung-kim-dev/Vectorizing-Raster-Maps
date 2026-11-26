@@ -13,7 +13,7 @@ name = job.replace("_", r"\_")  # captions need escaped underscores
 
 # get column names, map to labels
 rows = {"Corners": "all_corner", "Angles": "angles",
-"All shapes": "all", "Polygons": "room", "Lines": "line"} #"Polygons (+ label)": "room_sem", "Lines (+ label)": "line_sem",
+"All shapes": "all", "Polygons": "room", "Lines": "line"} 
 
 cols = {"Precision": "prec", "Recall": "rec", "F1": "f1"}
 
@@ -30,14 +30,17 @@ def interval(m, stat):
     lo_hi = ci.get(f"{m}_{stat}")
     return f"[{lo_hi[0]:.2f}, {lo_hi[1]:.2f}]" if lo_hi else ""
 
-# one row per statistic, each followed by a row with its 95% intervals
-lines, index = [], []
-for c, s in cols.items():
-    lines.append({k: f"{value(m, s):.2f}" for k, m in rows.items()}); index.append(c)
-    lines.append({k: interval(m, s) for k, m in rows.items()}); index.append("")
-overall = pd.DataFrame(lines, index=index)
-print(overall.to_latex(caption=f"Overall results ({name}); 95\\% bootstrap intervals below each value",
-                       label=f"tab:overall_{job}"))
+def generate_overall(cols, rows):
+    # one row per statistic, each followed by a row with its 95% intervals
+    lines, index = [], []
+    for c, s in cols.items():
+        lines.append({k: f"{value(m, s):.2f} {interval(m, s)}" for k, m in rows.items()}); index.append(c)
+        # lines.append({k: interval(m, s) for k, m in rows.items()}); index.append("")
+    overall = pd.DataFrame(lines, index=index)
+    print(overall.to_latex(caption=f"Overall results ({name}); 95\\% bootstrap intervals below each value",
+                        label=f"tab:overall_{job}"))
+
+generate_overall(cols, rows)
                        
 # per label
 pl = pd.Series(res["per_label"])
@@ -48,6 +51,10 @@ per_label = pd.DataFrame({"Precision": pl.filter(regex="^prec_").rename(lambda k
 # calculate F1, fill in missing values as 0
 per_label["F1"] = (2 * per_label.Precision * per_label.Recall / (per_label.Precision + per_label.Recall)).fillna(0)
 per_label.index = per_label.index.str.replace("_", " ")
-print(per_label.sort_values('F1', ascending=False).iloc[:16].T.to_latex(float_format="%.2f", caption=f"Results per label ({name})", label=f"tab:per_label_{job}"))
+print(per_label.sort_values('F1', ascending=False).loc[['building', 'woods', 'cemetery', 'pool', 
+'water', 'path', 'sports field', 'street', 'grass', 'park']].T.to_latex(float_format="%.2f", caption=f"Results per label ({name})", label=f"tab:per_label_{job}"))
 
-print(per_label.sort_values('F1', ascending=False).iloc[16:].T.to_latex(float_format="%.2f", caption=f"Results per label ({name})", label=f"tab:per_label_{job}"))
+# print(per_label.sort_values('F1', ascending=False).iloc[16:].T.to_latex(float_format="%.2f", caption=f"Results per label ({name})", label=f"tab:per_label_{job}"))
+
+rows = {"Polygons (+ label)": "room_sem", "Lines (+ label)": "line_sem"}
+generate_overall(cols, rows)
