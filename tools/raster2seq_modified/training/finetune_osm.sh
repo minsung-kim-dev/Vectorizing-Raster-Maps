@@ -8,7 +8,7 @@ set -euo pipefail
 REPO=$(cd "$(dirname "$0")/../../.." && pwd)
 R2S=${R2S:-$REPO/../Raster2Seq}
 CROPS=${CROPS:-$REPO/crops}
-DATA=${DATA:-/share/garg/jrg377/coco_osm_fixed}
+DATA=${DATA:-/share/garg/jrg377/coco_osm_gray}
 # OUTPUT_DIR=${OUTPUT_DIR:-/share/garg/jrg377/osm_stage2_queens4000_newvocab_checkpoints}
 OUTPUT_DIR=${OUTPUT_DIR:-/share/garg/jrg377/osm_stage2_checkpoints}
 
@@ -48,7 +48,7 @@ torchrun --nproc_per_node=${NUM_GPUS} --master_port=14159 main_ddp.py \
     --seq_len ${SEQ_LEN} \
     --row_tolerance ${ROW_TOL} \
     --num_bins ${NUM_BINS} \
-    --ckpt_every_epoch=10 \
+    --ckpt_every_epoch=50 \
     --eval_every_epoch=50 \
     --label_smoothing 0.1 \
     --epochs ${EPOCHS} \

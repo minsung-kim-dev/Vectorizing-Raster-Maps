@@ -13,20 +13,20 @@ REPO=$(cd "$(dirname "$0")/../../.." && pwd)
 R2S=${R2S:-$REPO/../Raster2Seq}
 DATA=${DATA:-/share/garg/jrg377/coco_osm_fixed}
 OUTPUT_DIR=${OUTPUT_DIR:-/share/garg/jrg377/osm_stage2_checkpoints}
-JOB=osm_stage2_queens_4000pretrain_tuned_v2
+JOB=osm_stage2_queens_4000pretrain_tuned_v3
 
 # final stage 1 weights: update!
 STAGE1=/share/garg/jrg377/osm_stage1_checkpoints/osm_stage_queens4000_pretrain_tuned/checkpoint.pth   
-# OLD=$OUTPUT_DIR/osm_stage2_queens_4000pretrain_tuned
+# OLD=$OUTPUT_DIR/osm_stage2_queens_4000pretrain_tuned_v2
 # NEW=$OUTPUT_DIR/$JOB
 # mkdir -p "$NEW"
-python - "$OUTPUT_DIR/$JOB/checkpoint0699.pth" "$OUTPUT_DIR/$JOB/checkpoint.pth" <<'EOF'
-import collections, sys, torch
-c = torch.load(sys.argv[1], map_location="cpu")
-print("epoch", c["epoch"] + 1, "| drop before:", dict(c["lr_scheduler"]["milestones"]))
-c["lr_scheduler"]["milestones"] = collections.Counter({950: 1})   # drop at 950 instead of 700
-torch.save(c, sys.argv[2])
-EOF
+# python - "$OLD/checkpoint0899.pth" "$NEW/checkpoint.pth" <<'EOF'
+# import collections, sys, torch
+# c = torch.load(sys.argv[1], map_location="cpu")
+# print("epoch", c["epoch"] + 1, "| drop before:", dict(c["lr_scheduler"]["milestones"]))
+# c["lr_scheduler"]["milestones"] = collections.Counter({900: 1})   # drop at 900
+# torch.save(c, sys.argv[2])
+# EOF
 
 EPOCHS=1000
 
@@ -61,7 +61,7 @@ torchrun --nproc_per_node=${NUM_GPUS} --master_port=14159 main_ddp.py \
     --eval_every_epoch=50 \
     --label_smoothing 0.1 \
     --epochs ${EPOCHS} \
-    --lr_drop '950' \
+    --lr_drop '900' \
     --cls_loss_coef ${CLS_COEFF} \
     --coords_loss_coef ${COO_COEFF} \
     --room_cls_loss_coef ${SEM_COEFF} \
