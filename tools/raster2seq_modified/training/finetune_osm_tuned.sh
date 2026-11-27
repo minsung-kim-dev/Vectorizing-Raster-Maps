@@ -11,12 +11,12 @@ set -euo pipefail
 
 REPO=$(cd "$(dirname "$0")/../../.." && pwd)
 R2S=${R2S:-$REPO/../Raster2Seq}
-DATA=${DATA:-/share/garg/jrg377/coco_osm_fixed}
+DATA=${DATA:-/share/garg/jrg377/coco_osm_gray}
 OUTPUT_DIR=${OUTPUT_DIR:-/share/garg/jrg377/osm_stage2_checkpoints}
 
 # final stage 1 weights: update!
-STAGE1=/share/garg/jrg377/osm_stage1_checkpoints/osm_stage_queens4000_pretrain_tuned/checkpoint.pth   
-JOB=osm_stage2_queens_4000pretrain_tuned
+STAGE1=/share/garg/jrg377/osm_stage1_checkpoints/osm_stage_queens4000_pretrain_tunedgray/checkpoint.pth   
+JOB=osm_stage2_queens_4000pretrain_tunedgray
 EPOCHS=500
 
 IMAGE_SIZE=256

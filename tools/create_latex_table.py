@@ -25,9 +25,9 @@ def value(m, stat):
     return 2 * p * r / (p + r) if p + r else 0.0
 
 
-def interval(m, stat):
-    ci = res.get("ci")
-    lo_hi = ci.get(f"{m}_{stat}")
+def interval(m, stat, source="ci"):
+    """Confidence interval from results"""
+    lo_hi = res.get(source, {}).get(f"{m}_{stat}")
     return f"[{lo_hi[0]:.2f}, {lo_hi[1]:.2f}]" if lo_hi else ""
 
 def generate_overall(cols, rows):
@@ -50,9 +50,16 @@ per_label = pd.DataFrame({"Precision": pl.filter(regex="^prec_").rename(lambda k
 
 # calculate F1, fill in missing values as 0
 per_label["F1"] = (2 * per_label.Precision * per_label.Recall / (per_label.Precision + per_label.Recall)).fillna(0)
+
+# add CI
+per_label = per_label.sort_values("F1", ascending=False)
+for col, stat in (("Precision", "prec"), ("Recall", "rec"), ("F1", "f1")):
+    per_label[col] = [f"{v:.2f} {interval(stat, name, 'per_label_ci')}".strip() for name, v in per_label[col].items()]
+per_label.index = per_label.index.str.replace("_", " ")
+
 per_label.index = per_label.index.str.replace("_", " ")
 print(per_label.sort_values('F1', ascending=False).loc[['building', 'woods', 'cemetery', 'pool', 
-'water', 'path', 'sports field', 'street', 'grass', 'park']].T.to_latex(float_format="%.2f", caption=f"Results per label ({name})", label=f"tab:per_label_{job}"))
+'water', 'path', 'sports field', 'street']].T.to_latex(float_format="%.2f", caption=f"Results per label ({name})", label=f"tab:per_label_{job}"))
 
 # print(per_label.sort_values('F1', ascending=False).iloc[16:].T.to_latex(float_format="%.2f", caption=f"Results per label ({name})", label=f"tab:per_label_{job}"))
 

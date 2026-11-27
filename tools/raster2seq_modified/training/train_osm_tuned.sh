@@ -7,7 +7,7 @@ set -euo pipefail
 
 REPO=$(cd "$(dirname "$0")/../../.." && pwd)
 R2S=${R2S:-$REPO/../Raster2Seq}
-DATA=${DATA:-/share/garg/jrg377/coco_osm_fixed}
+DATA=${DATA:-/share/garg/jrg377/coco_osm_gray}
 OUTPUT_DIR=${OUTPUT_DIR:-/share/garg/jrg377/osm_stage1_checkpoints}
 
 IMAGE_SIZE=256    
@@ -20,7 +20,7 @@ CONVERTER=v3
 NUM_GPUS=1
 BATCH_SIZE=8      # lower if the GPU runs out of memory
 EPOCHS=500
-JOB="osm_stage_queens4000_pretrain_tuned"
+JOB="osm_stage_queens4000_pretrain_tunedgray"
 
 
 # ---- Stage 1 training ----

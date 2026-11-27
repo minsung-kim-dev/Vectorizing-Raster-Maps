@@ -31,7 +31,7 @@ evaluate() {  # one run: eval.py writes to a temporary folder; keep results.txt 
     if python eval.py --checkpoint "$RUNS_DIR/osm_stage1_tuning_$run/checkpoint.pth" --dataset_root "$DATA" \
         --eval_set "$SPLIT" --output_dir "$tmp" "${MODEL[@]}" --plot_pred '' --plot_density '' --plot_gt '' \
         --batch_size 32 --num_workers 0 --filter_gt_by_area --min_poly_area 25 > "$tmp/log.txt" 2>&1; then
-        cp "$tmp/results.txt" "$EVAL_DIR/$run.json"; ec
+        cp "$tmp/results.txt" "$EVAL_DIR/$run.json"; echo "done: $run"
     else
         cp "$tmp/log.txt" "$EVAL_DIR/$run.failed.log"; echo "FAILED: $run (see $EVAL_DIR/$run.failed.log)"
     fi
@@ -41,15 +41,15 @@ evaluate() {  # one run: eval.py writes to a temporary folder; keep results.txt 
 mkdir -p "$EVAL_DIR"
 cd "$R2S"
 for run in "${RUNS[@]}"; do
-    if [[ ! -f "$RUNS_DIR/osm_stage1_tuning_$run/checkpkip $run: no checkpoint"; continue; fi
+    if [[ ! -f "$RUNS_DIR/osm_stage1_tuning_$run/checkpoint.pth" ]]; then echo "skip $run: no checkpoint"; continue; fi
     if [[ -f "$EVAL_DIR/$run.json" ]]; then echo "skip $run: already evaluated"; continue; fi
     echo "start: $run"
     evaluate "$run" &
-    while (( $(jobs -rp | wc -l) >= P )); do sleep 5; d
+    while (( $(jobs -rp | wc -l) >= P )); do sleep 5; done  # at most P at a time
 done
 wait
 
-# one table: each run's metrics, then the mean / std ov
+# one table: each run's metrics, then the mean / std over seeds of each setting
 python - "$EVAL_DIR" <<'EOF'
 import glob, json, os, sys
 import pandas as pd
@@ -59,8 +59,10 @@ for f in glob.glob(os.path.join(sys.argv[1], "*.json")):
     rows.append({"run": os.path.basename(f)[:-5], **{k: v for k, v in r.items() if isinstance(v, float)}})
 df = pd.DataFrame(rows).set_index("run")
 cols = [c for c in ["room_f1", "corner_f1", "angles_f1", "line_f1", "line_corner_f1", "all_f1", "all_corner_f1"] if c in df]
-print(df[cols].sort_values("room_f1", ascending=False).
+print(df[cols].sort_values("room_f1", ascending=False).round(3).to_string())
 df["config"] = df.index.str.replace(r"_\d+$", "", regex=True).str.replace(r"^base\d$", "base", regex=True)
-print(df.groupby("config")[cols].agg(["mean", "std", "c_f1", "mean"), ascending=False).round(3).to_string())
+print(df.groupby("config")[cols].agg(["mean", "std", "count"]).sort_values(("room_f1", "mean"), ascending=False).round(3).to_string())
 df.to_csv(os.path.join(sys.argv[1], "val_results.csv"))
+cols_subset=['all_f1', 'room_f1', 'line_f1']
+print(df.groupby("config")[cols_subset].agg(["mean", "std", "count"]).sort_values(("all_f1", "mean"), ascending=False).round(3).astype(str).to_latex())
 EOF

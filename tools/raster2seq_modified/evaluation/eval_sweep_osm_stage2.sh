@@ -45,7 +45,6 @@ mkdir -p "$EVAL_DIR"
 cd "$R2S"
 for run in "${RUNS[@]}"; do
     if [[ ! -f "$RUNS_DIR/$run/checkpoint.pth" ]]; then echo "skip $run: no checkpoint"; continue; fi
-    if [[ -f "$EVAL_DIR/$run.json" ]]; then echo "skip $run: already evaluated"; continue; fi
     echo "start: $run"
     evaluate "$run" &
     while (( $(jobs -rp | wc -l) >= P )); do sleep 5; done  # at most P at a time
@@ -67,4 +66,6 @@ print(df[cols].sort_values("room_f1", ascending=False).round(3).to_string())
 df["config"] = df.index.str.replace(r"_\d+$", "", regex=True).str.replace(r"^base\d$", "base", regex=True)
 print(df.groupby("config")[cols].agg(["mean", "std", "count"]).sort_values(("room_f1", "mean"), ascending=False).round(3).to_string())
 df.to_csv(os.path.join(sys.argv[1], "val_results_stage2.csv"))
+cols_subset=['all_f1', 'room_f1', 'line_f1']
+print(df.groupby("config")[cols_subset].agg(["mean", "std", "count"]).sort_values(("all_f1", "mean"), ascending=False).round(3).astype(str).to_latex())
 EOF
