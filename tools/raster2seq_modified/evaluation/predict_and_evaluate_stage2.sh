@@ -21,12 +21,13 @@ CHECKPOINTS=(
     # "osm_stage2_queens_4000pretrain_tuned    300   yes      coco_osm_fixed      256     yes"
     # "osm_stage2_queens_4000pretrain_tuned    last  yes      coco_osm_fixed      256     yes"
     # "osm_stage2_queens_4000pretrain_tuned_v2 last  yes      coco_osm_fixed      256     yes"
-    # "osm_stage2_queens_4000pretrain_tuned_v3 last  yes      coco_osm_fixed      256     yes"
-    "osm_stage2_queens_4000_gray             last  yes      coco_osm_gray       256     yes"
+    "osm_stage2_queens_4000pretrain_tuned_v3 last  yes      coco_osm_fixed      256     yes"
+    # "osm_stage2_queens_4000_gray             last  yes      coco_osm_gray       256     yes"
     # "osm_stage2_queens_4000_512px1024seq     last  yes      coco_osm_fixed      512     yes"
     # "osm_stage2_queens_4000pretrain_smallv2  last  yes      coco_osm_gray       256     yes"
     # "osm_stage2_queens_4000pretrain_smallv2  200   yes      coco_osm_fixed      256     no"
     # "osm_stage2_queens_4000pretrain_tuned_v3 last  yes      coco_osm_fixed      256     no"
+    # "osm_stage2_queens_4000_batch32          last  yes      coco_osm_fixed      256     yes"
 )
 
 # initialize basic stage 2 model
@@ -56,7 +57,7 @@ evaluate() {  # one list entry: "job epoch sem_attn" -> eval_outputs/<job>/<spli
     rm -rf "$out"; mkdir -p "$out"
     if python ../Raster2Seq/eval.py --checkpoint "$ckpt" --dataset_root "/share/garg/jrg377/$data" --eval_set "$SPLIT" --output_dir "$out" \
         "${MODEL[@]}" "${res[@]}" "${sem_attn[@]}" "${geom_mask[@]}" "${plots[@]}" --batch_size 32 --num_workers 0 \
-        --filter_gt_by_area --min_poly_area 25 --per_label_eval > "$out/log.txt" 2>&1; then
+        --filter_gt_by_area --min_poly_area 25 --per_label_eval --save_pred > "$out/log.txt" 2>&1; then
         echo "done: $job epoch $epoch"
     else
         echo "FAILED: $job epoch $epoch (see $out/log.txt)"

@@ -12,9 +12,7 @@ DATA=${DATA:-/share/garg/jrg377/coco_osm_fixed}
 OUTPUT_DIR=${OUTPUT_DIR:-/share/garg/jrg377/osm_stage1_checkpoints}
 
 IMAGE_SIZE=256    
-SEQ_LEN=512     
-# IMAGE_SIZE=512    
-# SEQ_LEN=1024      
+SEQ_LEN=512          
 NUM_BINS=32       # matches Raster2Seq's CubiCasa checkpoint used as the starting point
 ROW_TOL=0.08      # shape order: rows 8% of the image height, top to bottom, left to right (needs the fork)
 CLS_COEFF=5
@@ -23,7 +21,6 @@ CONVERTER=v3
 NUM_GPUS=1
 BATCH_SIZE=8
 EPOCHS=200
-# JOB="osm_stage_queens4000_512px1024seq"
 JOB="osm_stage_queens4000_original"
 
 
@@ -35,8 +32,6 @@ PRETRAIN=$(python -c "from raster2seq_hub import download_checkpoint; print(down
 torchrun --nproc_per_node=${NUM_GPUS} --master_port=14159 main_ddp.py \
     --dataset_name=osm \
     --dataset_root="$DATA" \
-    --per_token_sem_loss \
-    --jointly_train \
     --disable_wd_as_line \
     --job_name="$JOB" \
     --output_dir "$OUTPUT_DIR" \
@@ -48,7 +43,7 @@ torchrun --nproc_per_node=${NUM_GPUS} --master_port=14159 main_ddp.py \
     --row_tolerance ${ROW_TOL} \
     --num_bins ${NUM_BINS} \
     --ckpt_every_epoch=50 \
-    --eval_every_epoch=50 \
+    --eval_every_epoch=250 \
     --label_smoothing 0.1 \
     --epochs ${EPOCHS} \
     --lr_drop '100' \
